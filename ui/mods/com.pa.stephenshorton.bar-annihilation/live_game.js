@@ -142,7 +142,7 @@
 
       if (!document.getElementById('barann-overlay-style')) {
         var css =
-          '#barann-overlay{position:fixed;left:0;top:0;right:0;bottom:0;width:100%;height:100%;z-index:99999;display:none;align-items:center;justify-content:center;' +
+          '#barann-overlay{position:absolute;left:0;top:0;right:0;bottom:0;width:100%;height:100%;z-index:99999;display:none;align-items:center;justify-content:center;' +
           'background:rgba(8,12,18,0.8);font-family:Exo,"Segoe UI",sans-serif;color:#cfe3f2;}' +
           '#barann-overlay.show{display:flex;}' +
           '#barann-kb{padding:18px 22px;background:rgba(14,20,28,0.97);border:1px solid #2b6c9c;border-radius:10px;box-shadow:0 8px 44px rgba(0,0,0,.6);}' +
@@ -261,7 +261,17 @@
         $root.find('#barann-kb-sub').text(combo ? ('Layer: ' + combo.toUpperCase().replace(/\+/g, ' + ')) : 'Base layer — hold Ctrl / Shift / Alt to see those layers');
       }
 
-      function show() { ensureRoot(); idxCache = null; visible = true; $root.addClass('show'); render(); }
+      function show() {
+        ensureRoot(); idxCache = null; visible = true; $root.addClass('show'); render();
+        try {
+          var el = $root[0], kb = $root.find('#barann-kb')[0];
+          var cs = window.getComputedStyle(el), r = el.getBoundingClientRect();
+          var kr = kb ? kb.getBoundingClientRect() : null;
+          log('overlay geom: pos=' + cs.position + ' disp=' + cs.display +
+              ' rect=' + Math.round(r.width) + 'x' + Math.round(r.height) + '@' + Math.round(r.left) + ',' + Math.round(r.top) +
+              ' kbRect=' + (kr ? Math.round(kr.width) + 'x' + Math.round(kr.height) : 'none'));
+        } catch (e) {}
+      }
       function hide() { visible = false; mods.ctrl = mods.alt = mods.shift = false; if ($root) $root.removeClass('show'); }
       var toggleLock = false;
       function toggle() {
