@@ -15,8 +15,11 @@ Legend: ✅ supported · ⚠️ partial / conditions · ⛔ blocked for a client
   `handlers`, `ko`, `engine` all exist when our JS runs. ✅
 - Scene file must be at `coui://ui/mods/<id>/live_game.js` (`community-mods-manager.js:93`);
   an **enabled** mod's `ui/` is mounted into `coui://ui/`. Our repo layout + the
-  `client_mods/<id>` junction satisfy this. The mod must be enabled in-game (writes
-  `client_mods/mods.json`) to mount.
+  `mods\<id>` junction satisfy this. **On-disk gotcha:** the engine mounts the data dir's
+  `mods\` folder as the virtual `/client_mods/` (confirmed in `log\PA-*.txt`:
+  `Mounting …\Planetary Annihilation\mods\ as /client_mods/`) — so filesystem client mods
+  go in `mods\`, not a folder named `client_mods`. The mod must be enabled in-game (writes
+  `mods\mods.json`) to mount.
 
 ## Globals available to injected `live_game` JS
 

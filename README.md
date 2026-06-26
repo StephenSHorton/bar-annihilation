@@ -37,11 +37,20 @@ Coherent UI layer.
 
 ## Local dev install
 
-1. Locate the PA data dir (Windows: `%LOCALAPPDATA%\Uber Entertainment\Planetary Annihilation`).
-2. Symlink or copy this repo's mod payload into `client_mods/` so a top-level
-   `modinfo.json` sits directly inside the mod folder.
-3. Launch PA with `--devmode`; the mod shows up under Community Mods → Installed.
-4. Debug the JS with the Coherent UI Debugger (`--coherent_port=9999`).
+1. PA data dir: `%LOCALAPPDATA%\Uber Entertainment\Planetary Annihilation`.
+2. Install by junctioning this repo into the data dir's **`mods\`** folder — the engine
+   mounts on-disk `mods\` as the virtual `/client_mods/` (a PA naming gotcha; it is **not**
+   a folder literally named `client_mods`):
+   ```powershell
+   New-Item -ItemType Junction `
+     -Path "$env:LOCALAPPDATA\Uber Entertainment\Planetary Annihilation\mods\com.pa.stephenshorton.bar-annihilation" `
+     -Target "C:\Users\<you>\projects\bar-annihilation"
+   ```
+   A junction keeps edits live (no copy step).
+3. Launch PA → **Community Mods → Installed** → enable "BAR Annihilation" (writes
+   `mods\mods.json` mount order). Reload/restart so the mod's `ui/` mounts.
+4. UI `console.log` lands in `log\PA-<timestamp>.txt` as `[JS/game]` lines; or attach the
+   Coherent UI Debugger with launch option `--coherent_port=9999`.
 
 ## Open items before real coding
 
