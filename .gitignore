@@ -1,0 +1,13 @@
+# Packaged distributables
+/dist/
+*.zip
+
+# OS cruft
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/
+.idea/
+*.swp

@@ -1,0 +1,17 @@
+{
+  "identifier": "com.pa.stephenshorton.bar-annihilation",
+  "display_name": "BAR Annihilation",
+  "description": "Beyond All Reason-style unit control for Planetary Annihilation: TITANS — command-queue editing, grid build menu, area commands, formations, and smart selection. Client-side and local-only; safe in any online game.",
+  "author": "StephenSHorton",
+  "version": "0.0.1",
+  "build": "94684",
+  "date": "2026-06-25",
+  "context": "client",
+  "category": ["ui", "settings"],
+  "forum": "https://forums.planetaryannihilation.com/",
+  "github": "https://github.com/StephenSHorton/bar-annihilation",
+  "signature": " ",
+  "scenes": {
+    "live_game": ["coui://ui/mods/com.pa.stephenshorton.bar-annihilation/live_game.js"]
+  }
+}
