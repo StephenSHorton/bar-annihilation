@@ -1,0 +1,59 @@
+name: Release
+
+# Packages the mod into a zip that players drop into their PA `mods\` folder.
+# Runs when a GitHub Release is published (and on-demand via "Run workflow").
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Version label for the package name (e.g. v0.0.1)"
+        required: false
+        default: "dev"
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Syntax-check mod JS
+        run: find ui -name '*.js' -print0 | xargs -0 -I{} node --check "{}"
+
+      - name: Resolve version label
+        id: ver
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            echo "tag=${{ github.event.release.tag_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Package mod
+        run: |
+          ID=com.pa.stephenshorton.bar-annihilation
+          OUT="bar-annihilation-${{ steps.ver.outputs.tag }}.zip"
+          mkdir -p "dist/$ID"
+          cp -r ui modinfo.json README.md LICENSE "dist/$ID/"
+          ( cd dist && zip -r "../$OUT" "$ID" )
+          echo "OUT=$OUT" >> "$GITHUB_ENV"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bar-annihilation-mod
+          path: ${{ env.OUT }}
+
+      - name: Attach zip to the GitHub Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.OUT }}
