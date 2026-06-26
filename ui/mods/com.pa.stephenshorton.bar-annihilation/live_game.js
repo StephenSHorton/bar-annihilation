@@ -142,7 +142,7 @@
       var PANEL_ID = 'barann-overlay-panel';
       var SRC = 'coui://ui/mods/com.pa.stephenshorton.bar-annihilation/kb_overlay.html';
       var TOGGLE_WHICH = 220; // backslash
-      var visible = false, el = null, idx = null, pushTimer = null;
+      var visible = false, el = null, idx = null, pushTimer = null, layersCache = null;
       var mods = { ctrl: false, alt: false, shift: false };
 
       var MOD = 'modk';
@@ -205,11 +205,11 @@
         return ix;
       }
 
-      function buildHtml() {
+      function buildLayerRows(combo) {
         if (!idx) idx = buildIndex();
-        var combo = currentCombo(), layer = idx[combo] || {};
-        var h = '<div class="kb-panel"><div class="kb-title">BAR Annihilation — Key Bindings</div>';
-        h += '<div class="kb-sub">' + (combo ? ('Layer: ' + esc(combo.toUpperCase().split('+').join(' + '))) : 'Base layer — hold Ctrl / Shift / Alt to see those layers') + '</div>';
+        var layer = idx[combo] || {};
+        var hasC = combo.indexOf('ctrl') >= 0, hasA = combo.indexOf('alt') >= 0, hasS = combo.indexOf('shift') >= 0;
+        var h = '';
         for (var r = 0; r < ROWS.length; r++) {
           h += '<div class="kb-row">';
           for (var c = 0; c < ROWS[r].length; c++) {
@@ -217,7 +217,7 @@
             for (var x = 2; x < cell.length; x++) cls += ' ' + cell[x];
             var isMod = (token === 'ctrl' || token === 'alt' || token === 'shift');
             if (isMod) {
-              if ((token === 'ctrl' && mods.ctrl) || (token === 'alt' && mods.alt) || (token === 'shift' && mods.shift)) cls += ' held';
+              if ((token === 'ctrl' && hasC) || (token === 'alt' && hasA) || (token === 'shift' && hasS)) cls += ' held';
             } else {
               var b = layer[token];
               if (b) { cls += ' bound' + (b.ours ? ' ours' : ''); act = '<div class="kb-act">' + esc(b.label) + '</div>'; }
@@ -226,12 +226,27 @@
           }
           h += '</div>';
         }
-        h += '<div class="kb-legend">'
-          + '<span><span class="kb-swatch" style="background:#1c3145;border:1px solid #3f7fb0;"></span>PA action</span>'
-          + '<span><span class="kb-swatch" style="background:#2a2410;border:1px solid #d2a73a;"></span>BAR Annihilation (overrides PA)</span>'
-          + '<span><span class="kb-swatch" style="background:#2f5a3a;border:1px solid #5fbf7f;"></span>modifier held</span>'
-          + '<span>Esc to close</span></div></div>';
         return h;
+      }
+
+      var TABS = [
+        { combo: '',      label: 'No modifier' },
+        { combo: 'ctrl',  label: 'Ctrl' },
+        { combo: 'alt',   label: 'Alt' },
+        { combo: 'shift', label: 'Shift' }
+      ];
+
+      function buildLayers() {
+        if (!idx) idx = buildIndex();
+        var out = {};
+        for (var i = 0; i < TABS.length; i++) out[TABS[i].combo] = buildLayerRows(TABS[i].combo);
+        return out;
+      }
+
+      function heldCombo() {
+        var n = (mods.ctrl ? 1 : 0) + (mods.alt ? 1 : 0) + (mods.shift ? 1 : 0);
+        if (n !== 1) return '';
+        return mods.ctrl ? 'ctrl' : (mods.alt ? 'alt' : 'shift');
       }
 
       function ensurePanel() {
@@ -253,12 +268,13 @@
       function pushState() {
         var p = api.panels[PANEL_ID];
         if (!p || p.id === undefined || p.id < 0) return;    // wait until panel.create resolved
-        try { p.message('bar.render', { html: buildHtml() }); } catch (e) { warn('overlay push failed: ' + (e && e.message)); }
+        if (!layersCache) layersCache = buildLayers();
+        try { p.message('bar.render', { tabs: TABS, layers: layersCache, held: heldCombo() }); } catch (e) { warn('overlay push failed: ' + (e && e.message)); }
       }
 
       function show() {
         ensurePanel();
-        idx = null;                                          // recompute (binds may have changed)
+        idx = null; layersCache = null;                       // recompute (binds may have changed)
         if (el) el.style.display = '';
         visible = true;
         pushState();
