@@ -21,8 +21,10 @@ with `queue` as the only lever; no JS path reads/inserts/removes queue items. Sh
 is already native. (The old "M1 — command-queue editing" milestone is therefore dropped.)
 
 ## M1 — Selection power tools  *(a)*  🚧 IN PROGRESS
-Slice 1 shipped & tested: Alt+C all-combat, Alt+D idle-builder, Alt+X split-50%
-(provisional binds). Remaining: air/land/naval + on-screen variants, all/idle factories,
+Shipped (real BAR **Grid** keys, total PA override via Mousetrap): **Tab**=commander,
+**Ctrl+Tab**=idle builder, **Ctrl+Q**=split-50%, **Ctrl+E**=all-combat,
+**Q**=select-same-type-on-screen; plus backslash=keyboard overlay (modal, tabbed
+layers, blocks actions while open) and Ctrl+Shift+R=dev scene reload. Remaining: air/land/naval + on-screen variants, all/idle factories,
 idle-builder **cycling** + camera-center, select-all-of-type (on-screen / map-wide),
 control-group parity, append/subtract modifiers, and a JS reimplementation of BAR's
 `select Source+_Filter_+Conclusion` DSL (filter over the unit list). Then move binds onto

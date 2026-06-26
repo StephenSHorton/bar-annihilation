@@ -90,11 +90,30 @@
         log('BAR split 50%: kept ' + half.length + ' of ' + s.units);
       }
 
+      function selectAllCombat() {
+        api.select.allCombatUnits();
+        log('BAR: select all combat units');
+      }
+
+      // BAR sc_q: select all on-screen units matching the type(s) currently selected.
+      function selectSameTypeOnScreen() {
+        var sel = (typeof model !== 'undefined' && model.selection)
+          ? ((typeof model.selection === 'function') ? model.selection() : model.selection) : null;
+        var types = (sel && sel.spec_ids) ? Object.keys(sel.spec_ids) : [];
+        if (!types.length) { log('BAR: select same type -- nothing selected'); return; }
+        var hd = (typeof api !== 'undefined' && api.Holodeck) ? api.Holodeck.focused : null;
+        if (!hd || !hd.selectMatchingTypes) { warn('BAR: no focused holodeck for selectMatchingTypes'); return; }
+        hd.selectMatchingTypes('default', types);
+        log('BAR: select same type on screen (' + types.length + ' type(s))');
+      }
+
       // Mousetrap key string (BAR Grid default) -> { label, run }.
       var KEYMAP = {
         'tab':      { label: 'Select commander',    run: function () { api.select.commander(); log('BAR: select commander'); } },
         'ctrl+tab': { label: 'Select idle builder', run: function () { api.select.idleFabber(); log('BAR: select idle builder'); } },
         'ctrl+q':   { label: 'Split selection 50%', run: split50 },
+        'ctrl+e':   { label: 'Select all combat',   run: selectAllCombat },
+        'q':        { label: 'Select same type (on screen)', run: selectSameTypeOnScreen },
         '\\':       { label: 'Toggle key overlay',  run: function () { if (BarAnnihilation.overlayToggle) BarAnnihilation.overlayToggle(); else warn('overlay toggle not ready yet'); } },
         'ctrl+shift+r': { label: 'Reload UI scene (dev)', run: function () { try { log('reloading live_game scene...'); api.game.debug.reloadScene(api.Panel.pageId); } catch (e) { err('scene reload failed', e); } } }
       };
@@ -117,7 +136,7 @@
           try { Mousetrap.unbind(k); Mousetrap.bind(k, wrap(KEYMAP[k].run), 'keydown'); n++; }
           catch (e) { err('failed to bind ' + k, e); }
         }
-        log('BAR binds applied (' + n + ') — Tab=commander, Ctrl+Tab=idle-builder, Ctrl+Q=split-50% (PA blocked on these)');
+        log('BAR binds applied (' + n + ' keys, PA blocked): ' + keys.join(' '));
       }
       applyBinds();
 
