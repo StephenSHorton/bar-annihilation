@@ -242,8 +242,7 @@
         el.id = PANEL_ID;
         el.setAttribute('src', SRC);
         el.setAttribute('fit', 'dock');
-        el.setAttribute('no-input', '');                     // passive: clicks pass through
-        el.setAttribute('no-keyboard', '');                  // keep keys on host so toggle / Esc / layers fire
+        el.setAttribute('no-keyboard', '');                  // keep keyboard on host (our capture handler drives it)
         el.style.cssText = 'position:absolute;left:0;top:0;width:100%;height:100%;z-index:1500;';
         document.body.appendChild(el);
         try { api.Panel.bindElement(el); log('overlay panel bound: ' + PANEL_ID); }
@@ -289,13 +288,24 @@
         return ch;
       }
 
-      $(document).on('keydown.barAnnOverlay', function (e) {
-        if (e.which === TOGGLE_WHICH && !e.ctrlKey && !e.altKey && !e.shiftKey) { e.preventDefault(); toggle(); return false; }
-        if (!visible) return;
-        if (e.which === 27) { hide(); return false; } // Esc closes
-        if (updMods(e, true)) pushState();
-      });
-      $(document).on('keyup.barAnnOverlay', function (e) { if (visible && updMods(e, false)) pushState(); });
+      // Capture phase: runs BEFORE PA's Mousetrap/handlers. While the overlay is
+      // open we swallow EVERY key (so no game action fires) and act only on our
+      // controls; while closed we only grab the open key.
+      function onKeyDownCap(e) {
+        if (visible) {
+          if (e.which === 27 || (e.which === TOGGLE_WHICH && !e.ctrlKey && !e.altKey && !e.shiftKey)) { hide(); }
+          else if (updMods(e, true)) pushState();
+          e.preventDefault(); e.stopImmediatePropagation(); return false;
+        }
+        if (e.which === TOGGLE_WHICH && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+          e.preventDefault(); e.stopImmediatePropagation(); toggle(); return false;
+        }
+      }
+      function onKeyUpCap(e) {
+        if (visible) { if (updMods(e, false)) pushState(); e.preventDefault(); e.stopImmediatePropagation(); return false; }
+      }
+      document.addEventListener('keydown', onKeyDownCap, true);
+      document.addEventListener('keyup', onKeyUpCap, true);
 
       log('keyboard overlay ready (panel view) — press the backslash key to toggle; hold Ctrl/Shift/Alt for layers');
     }
