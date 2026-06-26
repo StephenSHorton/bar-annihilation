@@ -106,3 +106,38 @@ idle-builder cycle (`idleFabber` + camera) · select-all-of-type (`selectMatchin
 `unitsById`) · additive/subtractive via shift/force_remove.
 ⚠️ Deferred: per-unit-HP filters (damaged select), SmartSelect box-modifier interception
 (engine owns the box). ⛔ Out: add-to-group / toggle-in-group (no engine verb).
+
+## Overlay rendering (custom HUD) — MUST use a Coherent `<panel>`, not a `<div>`
+
+PA's `live_game` document is a **transparent host view composited BELOW the 3D holodeck
+surface**. Any DOM appended to `document.body` gets correct layout and **captures mouse
+input** but is **occluded by the 3D world and never paints** (proven in-game: a full-screen
+solid probe div logged visible/full-size yet showed nothing). The entire visible HUD is
+built from separate Coherent child **Views** created from `<panel src="coui://...">` via
+`engine.call('panel.create')` (`shared/js/api/panel.js`).
+
+**To draw a visible overlay, create a `<panel>` (not a `<div>`):**
+
+    var el = document.createElement('panel');            // MUST be <panel>
+    el.id = 'my-overlay';
+    el.setAttribute('src', 'coui://ui/mods/<id>/overlay.html');
+    el.setAttribute('fit', 'dock');                      // full viewport
+    el.setAttribute('no-input', '');                     // optional: mouse passes through
+    el.setAttribute('no-keyboard', '');                  // optional: keep keys on the host
+    el.style.cssText = 'position:absolute;left:0;top:0;width:100%;height:100%;z-index:1500;';
+    document.body.appendChild(el);
+    api.Panel.bindElement(el);                            // -> panel.create -> a view that PAINTS
+
+Toggle by setting the element's CSS `display` (a 200ms poll pushes `panel.visible`). The
+painted content lives in the child HTML; push data into it with
+`api.panels['<id>'].message('msg', payload)`. The child boots `bundle://boot/boot.js`,
+declares `var handlers = {}`, and calls `app.registerWithCoherent(model, handlers)` to
+receive messages (`helpers.js` `read_message` -> `handlers[msg]`).
+
+- New overlay `.html` files in the mod dir are served live via `coui://` (the junction dir
+  is mounted); referenced by panel `src`, NOT modinfo `scenes`, so **no zip-regen / restart**
+  — only a scene reload (Ctrl+Shift+R, our dev bind).
+- z-index / position were red herrings; `<div>`-vs-`<panel>` is the only thing that decides
+  whether it paints. Confirmed painting in-game 2026-06-25.
+- Source: `api/panel.js` (constructor 55-141; `panel.create` 113; `bindElement` 281;
+  `message`/`ready` 328-405); `helpers.js` (`registerWithCoherent` 572; dispatch 682-712).

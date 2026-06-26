@@ -1,25 +1,53 @@
-<!DOCTYPE html>
-<html>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
 <head>
-  <meta charset="utf-8" />
-  <title>BAR Annihilation overlay</title>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+  <meta locns="live_game" />
+  <noloc><title>BAR Annihilation: Key Overlay</title></noloc>
+  <link href="bundle://boot/boot.css" rel="stylesheet" type="text/css" />
+  <script src="bundle://boot/boot.js" type="text/javascript"></script>
   <style>
     html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; }
-    body { background: rgba(8,12,18,0.82); font-family: Exo, "Segoe UI", sans-serif; color:#cfe3f2; }
-    #wrap { position:absolute; left:0; top:0; right:0; bottom:0; display:flex; align-items:center; justify-content:center; }
-    #card { padding:42px 60px; background: rgba(14,20,28,0.97); border:2px solid #2b6c9c;
-            border-radius:12px; box-shadow:0 10px 50px rgba(0,0,0,.6); text-align:center; }
-    #card h1 { margin:0 0 12px; color:#7fd1ff; font-size:32px; letter-spacing:.04em; }
-    #card p  { margin:0; color:#9fb3c6; font-size:16px; }
-    #card .k { color:#ffd877; font-weight:bold; }
+    body.body_panel { background:rgba(8,12,18,0.82); font-family:Exo,"Segoe UI",sans-serif; color:#cfe3f2; }
+    #bar-root { position:absolute; left:0; top:0; right:0; bottom:0; display:flex; align-items:center; justify-content:center; }
+    .kb-panel { padding:18px 22px; background:rgba(14,20,28,0.97); border:1px solid #2b6c9c; border-radius:10px; box-shadow:0 10px 50px rgba(0,0,0,.6); }
+    .kb-title { font-size:18px; color:#7fd1ff; letter-spacing:.04em; }
+    .kb-sub { font-size:11px; margin:3px 0 12px; color:#8aa3b8; }
+    .kb-row { display:flex; margin-bottom:5px; }
+    .kb-key { position:relative; width:56px; height:56px; border:1px solid #33485c; border-radius:6px; background:#162230;
+              display:flex; flex-direction:column; padding:4px 5px; box-sizing:border-box; overflow:hidden; margin-right:5px; }
+    .kb-key .kb-cap { font-size:11px; color:#9fb3c6; font-weight:600; }
+    .kb-key .kb-act { font-size:8.5px; line-height:1.05; margin-top:auto; color:#bcd; }
+    .kb-key.bound { background:#1c3145; border-color:#3f7fb0; }
+    .kb-key.bound .kb-act { color:#d4e6f5; }
+    .kb-key.ours { background:#2a2410; border-color:#d2a73a; }
+    .kb-key.ours .kb-act { color:#ffd877; }
+    .kb-key.modk { background:#22303f; }
+    .kb-key.modk.held { background:#2f5a3a; border-color:#5fbf7f; color:#bfffce; }
+    .kb-key.wide { width:auto; min-width:56px; flex:1; }
+    .kb-legend { margin-top:10px; font-size:10px; color:#8aa3b8; display:flex; }
+    .kb-legend span { margin-right:18px; }
+    .kb-swatch { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:5px; vertical-align:middle; }
   </style>
 </head>
-<body>
-  <div id="wrap">
-    <div id="card">
-      <h1>BAR ANNIHILATION</h1>
-      <p>Overlay panel renders over the game. Press <span class="k">\</span> or <span class="k">Esc</span> to close.</p>
-    </div>
-  </div>
+<body class="body_panel">
+  <div id="bar-root"></div>
+  <script type="text/javascript">
+    // Dumb renderer: the live_game host computes the keyboard HTML and pushes it
+    // here via panel.message('bar.render', {html}). We just set innerHTML, deduped.
+    var model = {};
+    var handlers = {};
+    var _lastHtml = null;
+    $(document).ready(function () {
+      handlers['bar.render'] = function (payload) {
+        if (!payload || typeof payload.html !== 'string') return;
+        if (payload.html === _lastHtml) return;   // dedupe -> no flicker on repeat pushes
+        _lastHtml = payload.html;
+        var root = document.getElementById('bar-root');
+        if (root) root.innerHTML = payload.html;
+      };
+      app.registerWithCoherent(model, handlers);   // wires engine message dispatch + api.Panel.ready
+    });
+  </script>
 </body>
 </html>
