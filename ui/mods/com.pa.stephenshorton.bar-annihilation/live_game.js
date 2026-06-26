@@ -94,7 +94,8 @@
       var KEYMAP = {
         'tab':      { label: 'Select commander',    run: function () { api.select.commander(); log('BAR: select commander'); } },
         'ctrl+tab': { label: 'Select idle builder', run: function () { api.select.idleFabber(); log('BAR: select idle builder'); } },
-        'ctrl+q':   { label: 'Split selection 50%', run: split50 }
+        'ctrl+q':   { label: 'Split selection 50%', run: split50 },
+        '\\':       { label: 'Toggle key overlay',  run: function () { if (BarAnnihilation.overlayToggle) BarAnnihilation.overlayToggle(); else warn('overlay toggle not ready yet'); } }
       };
 
       // Publish our binds for the keyboard overlay.
@@ -141,15 +142,15 @@
 
       if (!document.getElementById('barann-overlay-style')) {
         var css =
-          '#barann-overlay{position:fixed;inset:0;z-index:99999;display:none;align-items:center;justify-content:center;' +
+          '#barann-overlay{position:fixed;left:0;top:0;right:0;bottom:0;width:100%;height:100%;z-index:99999;display:none;align-items:center;justify-content:center;' +
           'background:rgba(8,12,18,0.8);font-family:Exo,"Segoe UI",sans-serif;color:#cfe3f2;}' +
           '#barann-overlay.show{display:flex;}' +
           '#barann-kb{padding:18px 22px;background:rgba(14,20,28,0.97);border:1px solid #2b6c9c;border-radius:10px;box-shadow:0 8px 44px rgba(0,0,0,.6);}' +
           '#barann-kb .kb-title{font-size:16px;color:#7fd1ff;letter-spacing:.04em;}' +
           '#barann-kb .kb-sub{font-size:11px;margin:3px 0 12px;color:#8aa3b8;}' +
-          '#barann-kb .kb-row{display:flex;gap:5px;margin-bottom:5px;}' +
+          '#barann-kb .kb-row{display:flex;margin-bottom:5px;}' +
           '#barann-kb .kb-key{position:relative;width:56px;height:56px;border:1px solid #33485c;border-radius:6px;background:#162230;' +
-          'display:flex;flex-direction:column;padding:4px 5px;box-sizing:border-box;overflow:hidden;}' +
+          'display:flex;flex-direction:column;padding:4px 5px;box-sizing:border-box;overflow:hidden;margin-right:5px;}' +
           '#barann-kb .kb-key .kb-cap{font-size:11px;color:#9fb3c6;font-weight:600;}' +
           '#barann-kb .kb-key .kb-act{font-size:8.5px;line-height:1.05;margin-top:auto;color:#bcd;white-space:normal;}' +
           '#barann-kb .kb-key.bound{background:#1c3145;border-color:#3f7fb0;}' +
@@ -159,7 +160,8 @@
           '#barann-kb .kb-key.modk{background:#22303f;}' +
           '#barann-kb .kb-key.modk.held{background:#2f5a3a;border-color:#5fbf7f;color:#bfffce;}' +
           '#barann-kb .kb-key.wide{width:auto;min-width:56px;flex:1;}' +
-          '#barann-kb .legend{margin-top:10px;font-size:10px;color:#8aa3b8;display:flex;gap:18px;}' +
+          '#barann-kb .legend{margin-top:10px;font-size:10px;color:#8aa3b8;display:flex;}' +
+          '#barann-kb .legend span{margin-right:18px;}' +
           '#barann-kb .swatch{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:middle;}';
         var style = document.createElement('style');
         style.id = 'barann-overlay-style'; style.textContent = css; document.head.appendChild(style);
@@ -261,7 +263,14 @@
 
       function show() { ensureRoot(); idxCache = null; visible = true; $root.addClass('show'); render(); }
       function hide() { visible = false; mods.ctrl = mods.alt = mods.shift = false; if ($root) $root.removeClass('show'); }
-      function toggle() { if (visible) hide(); else show(); }
+      var toggleLock = false;
+      function toggle() {
+        if (toggleLock) return;            // collapse double-dispatch (Mousetrap + raw) for one physical press
+        toggleLock = true; setTimeout(function () { toggleLock = false; }, 0);
+        if (visible) hide(); else show();
+        log('overlay toggle -> ' + (visible ? 'shown' : 'hidden'));
+      }
+      BarAnnihilation.overlayToggle = toggle; // also bound to backslash via bar-binds (Mousetrap, blocks PA)
 
       function updMods(e, down) {
         var nc = e.ctrlKey, na = e.altKey, ns = e.shiftKey, ch = false;
