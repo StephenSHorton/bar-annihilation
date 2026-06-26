@@ -17,7 +17,9 @@
     .kb-key { position:relative; width:56px; height:56px; border:1px solid #33485c; border-radius:6px; background:#162230;
               display:flex; flex-direction:column; padding:4px 5px; box-sizing:border-box; overflow:hidden; margin-right:5px; }
     .kb-key .kb-cap { font-size:11px; color:#9fb3c6; font-weight:600; }
-    .kb-key .kb-act { font-size:8.5px; line-height:1.05; margin-top:auto; color:#bcd; }
+    .kb-key .kb-act { font-size:8px; line-height:1.04; margin-top:auto; color:#bcd;
+                      display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:3;
+                      overflow:hidden; text-overflow:ellipsis; word-break:break-word; }
     .kb-key.bound { background:#1c3145; border-color:#3f7fb0; }
     .kb-key.bound .kb-act { color:#d4e6f5; }
     .kb-key.ours { background:#2a2410; border-color:#d2a73a; }

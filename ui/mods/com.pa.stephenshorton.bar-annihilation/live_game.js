@@ -188,12 +188,15 @@
             for (var k in defs) {
               if (!defs.hasOwnProperty(k)) continue;
               var d = defs[k]; if (!d || d.type !== 'keybind') continue;
+              if (typeof k !== 'string' || k.charAt(0) === '_') continue;     // skip synthetic keys
+              var title = (typeof d.title === 'string') ? locStrip(d.title) : '';
+              if (!title) continue;                                           // skip entries without a clean string label
               var val = null;
               try { if (api.settings.value) val = api.settings.value('keyboard', k); } catch (e) {}
               if (!val) val = d.default;
-              if (!val) continue;
+              if (typeof val !== 'string' && !(val instanceof Array)) continue;
               var vals = (val instanceof Array) ? val : [val];
-              for (var vi = 0; vi < vals.length; vi++) { var pk = parseKeyStr(vals[vi]); if (pk) add(pk.mod, pk.base, locStrip(d.title || k), false); }
+              for (var vi = 0; vi < vals.length; vi++) { var pk = parseKeyStr(vals[vi]); if (pk) add(pk.mod, pk.base, title, false); }
             }
           }
         } catch (e) { warn('overlay: PA keybind read failed: ' + (e && e.message)); }
