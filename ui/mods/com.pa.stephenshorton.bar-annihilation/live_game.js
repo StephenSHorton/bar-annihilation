@@ -107,13 +107,36 @@
         log('BAR: select same type on screen (' + types.length + ' type(s))');
       }
 
+      // BAR 'focus': center (and track) the camera on the current selection.
+      function focusSelection() {
+        try { if (api.camera && api.camera.track) api.camera.track(true); } catch (e) {}
+      }
+      function selectThenFocus(promise) {
+        if (promise && promise.then) promise.then(focusSelection); else setTimeout(focusSelection, 30);
+      }
+
+      // BAR Ctrl+sc_w: select all units on the current planet matching selected type(s).
+      function selectSameTypeOnPlanet() {
+        var sel = (typeof model !== 'undefined' && model.selection)
+          ? ((typeof model.selection === 'function') ? model.selection() : model.selection) : null;
+        var types = (sel && sel.spec_ids) ? Object.keys(sel.spec_ids) : [];
+        if (!types.length) { log('BAR: select same type (planet) -- nothing selected'); return; }
+        var hd = (typeof api !== 'undefined' && api.Holodeck) ? api.Holodeck.focused : null;
+        if (!hd) { warn('BAR: no focused holodeck'); return; }
+        var planet = -1;
+        try { planet = api.camera.getFocus(hd.id).planet(); } catch (e) {}
+        api.select.onPlanetWithTypeFilter(planet, types, []);
+        log('BAR: select same type on planet ' + planet + ' (' + types.length + ' type(s))');
+      }
+
       // Mousetrap key string (BAR Grid default) -> { label, run }.
       var KEYMAP = {
-        'tab':      { label: 'Select commander',    run: function () { api.select.commander(); log('BAR: select commander'); } },
-        'ctrl+tab': { label: 'Select idle builder', run: function () { api.select.idleFabber(); log('BAR: select idle builder'); } },
+        'tab':      { label: 'Select commander',    run: function () { selectThenFocus(api.select.commander()); log('BAR: select commander (focus)'); } },
+        'ctrl+tab': { label: 'Select idle builder', run: function () { selectThenFocus(api.select.idleFabber()); log('BAR: select idle builder (focus)'); } },
         'ctrl+q':   { label: 'Split selection 50%', run: split50 },
         'ctrl+e':   { label: 'Select all combat',   run: selectAllCombat },
         'q':        { label: 'Select same type (on screen)', run: selectSameTypeOnScreen },
+        'ctrl+w':   { label: 'Select same type (whole planet)', run: selectSameTypeOnPlanet },
         '\\':       { label: 'Toggle key overlay',  run: function () { if (BarAnnihilation.overlayToggle) BarAnnihilation.overlayToggle(); else warn('overlay toggle not ready yet'); } },
         'ctrl+shift+r': { label: 'Reload UI scene (dev)', run: function () { try { log('reloading live_game scene...'); api.game.debug.reloadScene(api.Panel.pageId); } catch (e) { err('scene reload failed', e); } } }
       };
