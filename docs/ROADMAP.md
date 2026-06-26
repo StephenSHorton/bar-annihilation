@@ -21,15 +21,18 @@ with `queue` as the only lever; no JS path reads/inserts/removes queue items. Sh
 is already native. (The old "M1 — command-queue editing" milestone is therefore dropped.)
 
 ## M1 — Selection power tools  *(a)*  🚧 IN PROGRESS
-Shipped (real BAR **Grid** keys, total PA override via Mousetrap): **Tab**=commander,
-**Ctrl+Tab**=idle builder, **Ctrl+Q**=split-50%, **Ctrl+E**=all-combat,
-**Q**=select-same-type-on-screen; plus backslash=keyboard overlay (modal, tabbed
-layers, blocks actions while open) and Ctrl+Shift+R=dev scene reload. Remaining: air/land/naval + on-screen variants, all/idle factories,
-idle-builder **cycling** + camera-center, select-all-of-type (on-screen / map-wide),
-control-group parity, append/subtract modifiers, and a JS reimplementation of BAR's
-`select Source+_Filter_+Conclusion` DSL (filter over the unit list). Then move binds onto
-PA's keybind system with BAR-style defaults. ⛔ out (no engine verb): add-to-group,
-toggle-in-group. ⚠️ deferred (no per-unit HP in payload): damaged-unit filters.
+Shipped (real BAR **Grid** keys, total PA override via Mousetrap): **Tab**=commander
+(centers only on a *repeat* press while already selected), **Ctrl+Tab**=idle-builder
+**cycle** (selects one idle fabber, camera-jumps to it, advances on repeat presses),
+**Ctrl+Q**=split-50%, **Ctrl+E**=all-combat, **Q**=select-same-type-on-screen; plus
+backslash=keyboard overlay (modal, tabbed layers, blocks actions while open) and
+Ctrl+Shift+R=dev scene reload. Remaining: air/land/naval + on-screen variants, all/idle
+factories, control-group **double-tap focus** (next) + parity, append/subtract modifiers,
+and a JS reimplementation of BAR's `select Source+_Filter_+Conclusion` DSL (filter over the
+unit list). Then move binds onto PA's keybind system with BAR-style defaults. ⛔ out
+(no engine verb): select-same-**specific**-type map-wide (only on-screen via
+`selectMatchingTypes`, or whole-**category** map-wide which PA exposes natively),
+add-to-group, toggle-in-group. ⚠️ deferred (no per-unit HP in payload): damaged-unit filters.
 
 ## M3 — Grid build menu  *(c)*
 Spatial keyboard build grid + category keys (BAR's `gui_gridmenu`). Hotbuild2 is

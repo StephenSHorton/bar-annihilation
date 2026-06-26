@@ -67,6 +67,22 @@ Reference mods also use `action_sets` and `Mousetrap`. Wrap mod code in an IIFE.
 | Unit type categories | Bot/Tank/Air/Naval/Orbital/Advanced/Fabber/Factory/Commander | ✅ | `live_game_selection.js:49-58,119-127` |
 | **Per-unit HP (damaged-unit filter)** | not in selection payload | ⚠️ deferred | needs separate per-unit query |
 
+> **`*WithTypeFilter` take a CATEGORY, not a spec id.** `onScreen/onPlanetWithTypeFilter`,
+> `fromSelectionWithTypeFilter`, `idleFabbers/Factories` filter by unit-type **category**
+> strings (`Bot/Tank/Air/Naval/Orbital/Advanced/Fabber/Factory`) — PA's native quick-select
+> passes e.g. `'Bot'` with reject `'Fabber'` (`control_group_bar.js:194,210`). Passing specific
+> spec-ids matches nothing and the engine falls back to selecting **everything**. For
+> same-**specific**-type use `holodeck.selectMatchingTypes(option, Object.keys(spec_ids))`
+> — on-screen only; there is **no** specific-type map-wide verb.
+>
+> **Idle / on-planet selects need `focus_planet_id`** = the `planetId` observable on
+> `camera.getFocus(hd.id)` (`camera.js:379`), **not** `.planet()`. It defaults to `-1` until a
+> planet switch fires `focus_planet_changed`; coerce `-1 → 0` (PA's native idle button
+> defaults to `0`, `control_group_bar.js:47`) or planet-filtered selects return empty.
+>
+> **Control-group focus** = `input.doubleTap(recallGroup(n), () => api.camera.track(true))`
+> (`control_group_bar.js:169-187`): single-tap recalls, double-tap centers via `camera.track(true)`.
+
 ## Control groups
 
 | Need | PA call | Status | Source |

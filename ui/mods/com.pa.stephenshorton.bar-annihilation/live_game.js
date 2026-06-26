@@ -114,29 +114,65 @@
       function selectThenFocus(promise) {
         if (promise && promise.then) promise.then(focusSelection); else setTimeout(focusSelection, 30);
       }
+      // Stable signature (sorted unit ids) of the current selection.
+      function selSig() { var s = readSelection(); return s.ids.slice().sort().join(','); }
+      // Run a selector that changes selection; center the camera ONLY if the
+      // selection ends up UNCHANGED (BAR "press again, while already selected, to
+      // go there"). Selection updates arrive async, so we watch one selection event.
+      function selectThenFocusOnRepeat(selectorFn, label) {
+        var before = selSig(), done = false, sub = null;
+        function finish(changed) {
+          if (done) return; done = true;
+          try { if (sub) sub.dispose(); } catch (e) {}
+          if (!changed) focusSelection();
+          log('BAR: ' + label + (changed ? '' : ' (focus)'));
+        }
+        if (model.selection && model.selection.subscribe) {
+          sub = model.selection.subscribe(function () { finish(selSig() !== before); });
+          setTimeout(function () { finish(false); }, 250);   // no event => unchanged => center
+        } else { setTimeout(function () { finish(selSig() !== before); }, 60); }
+        try { selectorFn(); } catch (e) { err('BAR select failed', e); }
+      }
 
-      // BAR Ctrl+sc_w: select all units on the current planet matching selected type(s).
-      function selectSameTypeOnPlanet() {
-        var sel = (typeof model !== 'undefined' && model.selection)
-          ? ((typeof model.selection === 'function') ? model.selection() : model.selection) : null;
-        var types = (sel && sel.spec_ids) ? Object.keys(sel.spec_ids) : [];
-        if (!types.length) { log('BAR: select same type (planet) -- nothing selected'); return; }
-        var hd = (typeof api !== 'undefined' && api.Holodeck) ? api.Holodeck.focused : null;
-        if (!hd) { warn('BAR: no focused holodeck'); return; }
-        var planet = -1;
-        try { planet = api.camera.getFocus(hd.id).planet(); } catch (e) {}
-        api.select.onPlanetWithTypeFilter(planet, types, []);
-        log('BAR: select same type on planet ' + planet + ' (' + types.length + ' type(s))');
+      // BAR Ctrl+Tab: cycle ONE idle builder at a time (BAR's "SelectOne"). PA's
+      // legacy api.select.idleFabber() is unreliable (doesn't select/cycle), so we
+      // drive the native, reliable api.select.idleFabbers(planet) (selects ALL idle
+      // fabbers), read the resulting set via a one-shot selection subscription, then
+      // narrow to a single builder and advance a cycle pointer on each press.
+      var idleCycle = { last: null };
+      function currentPlanet() {
+        // focus_planet_id (camera.js:379) is what idleFabbers/onPlanet expect; NOT .planet().
+        // The camera api defaults it to -1 and only updates on a planet switch, but PA's
+        // own idle button defaults to 0 (control_group_bar.js:47) — so coerce -1 -> 0.
+        try { var pid = api.camera.getFocus(api.Holodeck.focused.id).planetId(); return (typeof pid === 'number' && pid >= 0) ? pid : 0; } catch (e) { return 0; }
+      }
+      function selectIdleBuilderCycle() {
+        var pid = currentPlanet();
+        if (!model.selection || !model.selection.subscribe) { api.select.idleFabbers(pid); return; }
+        var done = false, sub = null;
+        function finish(ids) {
+          if (done) return; done = true;
+          try { if (sub) sub.dispose(); } catch (e) {}
+          if (!ids || !ids.length) { log('BAR: no idle builders (planet ' + pid + ')'); return; }
+          ids = ids.slice().sort();
+          var nextIx = (ids.indexOf(idleCycle.last) + 1) % ids.length;   // not-found(-1) -> 0
+          idleCycle.last = ids[nextIx];
+          api.select.unitsById([ids[nextIx]]);
+          setTimeout(focusSelection, 30);
+          log('BAR: idle builder ' + (nextIx + 1) + '/' + ids.length);
+        }
+        sub = model.selection.subscribe(function () { finish(readSelection().ids); });
+        setTimeout(function () { finish(null); }, 250);   // fallback if nothing idle / no change
+        api.select.idleFabbers(pid);
       }
 
       // Mousetrap key string (BAR Grid default) -> { label, run }.
       var KEYMAP = {
-        'tab':      { label: 'Select commander',    run: function () { selectThenFocus(api.select.commander()); log('BAR: select commander (focus)'); } },
-        'ctrl+tab': { label: 'Select idle builder', run: function () { selectThenFocus(api.select.idleFabber()); log('BAR: select idle builder (focus)'); } },
+        'tab':      { label: 'Select commander',    run: function () { selectThenFocusOnRepeat(function () { api.select.commander(); }, 'select commander'); } },
+        'ctrl+tab': { label: 'Select idle builder', run: selectIdleBuilderCycle },
         'ctrl+q':   { label: 'Split selection 50%', run: split50 },
         'ctrl+e':   { label: 'Select all combat',   run: selectAllCombat },
         'q':        { label: 'Select same type (on screen)', run: selectSameTypeOnScreen },
-        'ctrl+w':   { label: 'Select same type (whole planet)', run: selectSameTypeOnPlanet },
         '\\':       { label: 'Toggle key overlay',  run: function () { if (BarAnnihilation.overlayToggle) BarAnnihilation.overlayToggle(); else warn('overlay toggle not ready yet'); } },
         'ctrl+shift+r': { label: 'Reload UI scene (dev)', run: function () { try { log('reloading live_game scene...'); api.game.debug.reloadScene(api.Panel.pageId); } catch (e) { err('scene reload failed', e); } } }
       };
