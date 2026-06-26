@@ -12,27 +12,22 @@ engine support, may not port.
 
 ---
 
-## M0 — Verify the PA `live_game` API  ⟵ next
-Map the catalog's right-hand columns onto concrete PA capabilities. Confirm:
-- reading current selection; iterating units & their types/queues
-- issuing orders (move/attack/build) and **queue insert / remove**
-- hooking keyboard & mouse input; reading world-space cursor position
-- the keybind/config surface
-Deliverable: a "hello world" build that loads in `live_game` and logs the live
-selection, **plus** an API map appended to the catalog (PA: yes / via X / no).
-Reference: Hotbuild2 and other shipped control mods.
+## M0 — Verify the PA `live_game` API  ✅ DONE (2026-06-25)
+Mod injects into `live_game` and runs; `model.selection()` returns real unit data;
+`api.select.*`, `api.unit.*`, `api.Holodeck`, input hooks all confirmed. Deliverable
+`docs/API-MAP.md` written. **Finding:** BAR's queue insert-at-front / pop is **⛔ not
+portable** — orders cross to the C++ sim via `engine.call('holodeck.unitCommand', …, queue)`
+with `queue` as the only lever; no JS path reads/inserts/removes queue items. Shift-append
+is already native. (The old "M1 — command-queue editing" milestone is therefore dropped.)
 
-## M1 — Command-queue editing  *(a)* — the headline feature
-- shift-append (confirm PA-native; wrap only if needed)
-- **insert command at front of queue** (BAR's Insert / `CMD.INSERT`)
-- **pop / remove front (or selected) queue item** (`CMD.REMOVE`)
-- cancel-last-order, clear-queue
-Gate: if PA can't address queue items by index/tag, this drops to (d) — flag early.
-
-## M2 — Selection power tools  *(a)*
-Control-group parity, select-all-of-type (on-screen / map-wide), idle-builder
-cycling, and a JS reimplementation of BAR's `select Source+_Filter_+Conclusion`
-DSL (filter over the unit list). Append/subtract/toggle modifiers.
+## M1 — Selection power tools  *(a)*  🚧 IN PROGRESS
+Slice 1 shipped & tested: Alt+C all-combat, Alt+D idle-builder, Alt+X split-50%
+(provisional binds). Remaining: air/land/naval + on-screen variants, all/idle factories,
+idle-builder **cycling** + camera-center, select-all-of-type (on-screen / map-wide),
+control-group parity, append/subtract modifiers, and a JS reimplementation of BAR's
+`select Source+_Filter_+Conclusion` DSL (filter over the unit list). Then move binds onto
+PA's keybind system with BAR-style defaults. ⛔ out (no engine verb): add-to-group,
+toggle-in-group. ⚠️ deferred (no per-unit HP in payload): damaged-unit filters.
 
 ## M3 — Grid build menu  *(c)*
 Spatial keyboard build grid + category keys (BAR's `gui_gridmenu`). Hotbuild2 is
