@@ -95,7 +95,8 @@
         'tab':      { label: 'Select commander',    run: function () { api.select.commander(); log('BAR: select commander'); } },
         'ctrl+tab': { label: 'Select idle builder', run: function () { api.select.idleFabber(); log('BAR: select idle builder'); } },
         'ctrl+q':   { label: 'Split selection 50%', run: split50 },
-        '\\':       { label: 'Toggle key overlay',  run: function () { if (BarAnnihilation.overlayToggle) BarAnnihilation.overlayToggle(); else warn('overlay toggle not ready yet'); } }
+        '\\':       { label: 'Toggle key overlay',  run: function () { if (BarAnnihilation.overlayToggle) BarAnnihilation.overlayToggle(); else warn('overlay toggle not ready yet'); } },
+        'ctrl+shift+r': { label: 'Reload UI scene (dev)', run: function () { try { log('reloading live_game scene...'); api.game.debug.reloadScene(api.Panel.pageId); } catch (e) { err('scene reload failed', e); } } }
       };
 
       // Publish our binds for the keyboard overlay.
