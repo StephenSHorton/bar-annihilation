@@ -94,58 +94,73 @@
   });
 
   // -------------------------------------------------------------------------
-  // M1 — Selection power tools. Provisional Alt+<key> binds (avoid clobbering
-  // PA defaults); we'll move these onto PA's keybind system with BAR-style
-  // defaults once the set is settled.
+  // M1 — Selection on real BAR (Grid) keys, with TOTAL override of PA.
+  //
+  // PA dispatches its hotkeys through Mousetrap (window.Mousetrap) from a global
+  // `active_dictionary` ko.computed. To make our action the ONLY thing that fires
+  // on a key (fully blocking PA's), we Mousetrap.unbind(key) then
+  // Mousetrap.bind(key, ourFn) AFTER PA binds — and re-apply whenever PA rebuilds
+  // its keymap (it does `Mousetrap.reset(); Mousetrap.bind(active_dictionary())`
+  // on settings/scene reload, which wipes ours).
+  //
+  // BAR-pure (Grid) selection set. Only actions with a clean PA api.select
+  // mapping are included. Notably PA has NO "select all units" API, so BAR's
+  // Ctrl+E (select all) is intentionally omitted.
   // -------------------------------------------------------------------------
   BarAnnihilation.register({
-    name: 'selection',
+    name: 'bar-binds',
     init: function () {
-      function safe(label, fn) { return function () { try { fn(); } catch (e) { err('action failed: ' + label, e); } }; }
-
-      // A simple zero-arg api.select.* action.
-      function sel(method, desc) {
-        return safe(method, function () {
-          if (!api.select || typeof api.select[method] !== 'function') { warn('api.select.' + method + ' missing'); return; }
-          api.select[method]();
-          log('select: ' + desc);
-        });
+      if (typeof Mousetrap === 'undefined' || !Mousetrap.bind) {
+        warn('Mousetrap unavailable — BAR key binds disabled');
+        return;
       }
 
       function split50() {
         var s = readSelection();
-        if (!s || s.units < 2) { log('split: need >=2 selected (have ' + (s ? s.units : 0) + ')'); return; }
+        if (!s || s.units < 2) { log('BAR split: need >=2 selected (have ' + (s ? s.units : 0) + ')'); return; }
         var half = s.ids.slice(0, Math.ceil(s.ids.length / 2));
         api.select.unitsById(half);
-        log('split 50%: kept ' + half.length + ' of ' + s.units);
+        log('BAR split 50%: kept ' + half.length + ' of ' + s.units);
       }
 
-      // e.which -> { name, run }. All fire on Alt only (no Ctrl/Shift).
-      var BINDS = {
-        67: { name: 'all combat (map)',    run: sel('allCombatUnits', 'all combat (map)') },            // Alt+C
-        86: { name: 'all combat (screen)', run: sel('allCombatUnitsOnScreen', 'all combat (screen)') }, // Alt+V
-        65: { name: 'air (screen)',        run: sel('allAirCombatUnitsOnScreen', 'air (screen)') },     // Alt+A
-        71: { name: 'land (screen)',       run: sel('allLandCombatUnitsOnScreen', 'land (screen)') },   // Alt+G
-        78: { name: 'naval (screen)',      run: sel('allNavalCombatUnitsOnScreen', 'naval (screen)') }, // Alt+N
-        70: { name: 'all factories',       run: sel('allFactories', 'all factories') },                 // Alt+F
-        69: { name: 'idle factories',      run: sel('allIdleFactories', 'idle factories') },            // Alt+E
-        68: { name: 'idle builder',        run: sel('idleFabber', 'idle builder') },                    // Alt+D
-        81: { name: 'commander',           run: sel('commander', 'commander') },                        // Alt+Q
-        88: { name: 'split ~50%',          run: safe('split50', split50) }                              // Alt+X
+      // Mousetrap key string (BAR Grid default) -> action. These OVERRIDE and
+      // fully block PA's action on the same physical key.
+      var KEYMAP = {
+        'tab':      function () { api.select.commander(); log('BAR: select commander'); },     // BAR Grid: commander
+        'ctrl+tab': function () { api.select.idleFabber(); log('BAR: select idle builder'); }, // BAR Grid: idle builder
+        'ctrl+q':   split50                                                                    // BAR Grid: split 50%
       };
 
-      $(document).on('keydown.barAnnSelection', function (e) {
-        if (!e.altKey || e.ctrlKey || e.shiftKey) return;
-        if (uiBusy()) return;
-        var bind = BINDS[e.which];
-        if (!bind) return;
-        e.preventDefault();
-        e.stopPropagation();
-        bind.run();
-      });
+      function wrap(fn) {
+        return function () {
+          if (uiBusy()) return;          // defer to PA while typing in chat / on landing
+          try { fn(); } catch (e) { err('BAR bind action failed', e); }
+          return false;                  // Mousetrap: preventDefault + stopPropagation (blocks PA)
+        };
+      }
 
-      log('selection module bound — Alt: C/V combat(map/screen) · A/G/N air/land/naval(screen) · ' +
-        'F factories · E idle-factories · D idle-builder · Q commander · X split-50%');
+      function applyBinds() {
+        var keys = Object.keys(KEYMAP), n = 0;
+        for (var i = 0; i < keys.length; i++) {
+          var k = keys[i];
+          try { Mousetrap.unbind(k); Mousetrap.bind(k, wrap(KEYMAP[k]), 'keydown'); n++; }
+          catch (e) { err('failed to bind ' + k, e); }
+        }
+        log('BAR binds applied (' + n + ') — Tab=commander, Ctrl+Tab=idle-builder, Ctrl+Q=split-50% (PA actions on these keys blocked)');
+      }
+
+      applyBinds();
+
+      // Re-apply after PA rebuilds its keymap (settings change / scene reload).
+      // Our subscriber is added after PA's, so it runs right after PA's reset+bind.
+      try {
+        if (typeof active_dictionary !== 'undefined' && active_dictionary && active_dictionary.subscribe)
+          active_dictionary.subscribe(function () { applyBinds(); });
+      } catch (e) { warn('could not hook active_dictionary: ' + (e && e.message)); }
+      try {
+        if (typeof input_maps_reload !== 'undefined' && input_maps_reload && input_maps_reload.progress)
+          input_maps_reload.progress(function () { setTimeout(applyBinds, 0); });
+      } catch (e) {}
     }
   });
 })();
