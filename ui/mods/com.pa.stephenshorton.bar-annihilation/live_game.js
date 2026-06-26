@@ -129,176 +129,56 @@
   });
 
   // -------------------------------------------------------------------------
-  // Keyboard overlay — a BAR-style visual keyboard showing every bound key.
-  // Reads PA's keybind definitions (api.settings.definitions.keyboard) for
-  // labels + our BarAnnihilation.binds (highlighted). Toggle with `\`; hold
-  // Ctrl/Shift/Alt to see those modifier layers.
+  // Keyboard overlay — rendered as a Coherent child VIEW (<panel>), NOT a <div>.
+  // PA's live_game host document is composited BELOW the 3D world, so a plain
+  // <div> appended to body never paints (it only captures input). The visible HUD
+  // is built from <panel src="coui://..."> child views; engine.call('panel.create')
+  // draws them on top. So our overlay is its own <panel> pointing at kb_overlay.html
+  // (same mod dir, served live via the junction). See docs/API-MAP.md.
   // -------------------------------------------------------------------------
   BarAnnihilation.register({
     name: 'keyboard-overlay',
     init: function () {
-      var TOGGLE_WHICH = 220; // backslash "\"
-      var visible = false, $root = null, idxCache = null;
-      var mods = { ctrl: false, alt: false, shift: false };
+      var PANEL_ID = 'barann-overlay-panel';
+      var SRC = 'coui://ui/mods/com.pa.stephenshorton.bar-annihilation/kb_overlay.html';
+      var visible = false, el = null;
 
-      if (!document.getElementById('barann-overlay-style')) {
-        var css =
-          '#barann-overlay{position:absolute;left:0;top:0;right:0;bottom:0;width:100%;height:100%;z-index:99999;display:none;align-items:center;justify-content:center;' +
-          'background:rgba(8,12,18,0.8);font-family:Exo,"Segoe UI",sans-serif;color:#cfe3f2;}' +
-          '#barann-overlay.show{display:flex;}' +
-          '#barann-kb{padding:18px 22px;background:rgba(14,20,28,0.97);border:1px solid #2b6c9c;border-radius:10px;box-shadow:0 8px 44px rgba(0,0,0,.6);}' +
-          '#barann-kb .kb-title{font-size:16px;color:#7fd1ff;letter-spacing:.04em;}' +
-          '#barann-kb .kb-sub{font-size:11px;margin:3px 0 12px;color:#8aa3b8;}' +
-          '#barann-kb .kb-row{display:flex;margin-bottom:5px;}' +
-          '#barann-kb .kb-key{position:relative;width:56px;height:56px;border:1px solid #33485c;border-radius:6px;background:#162230;' +
-          'display:flex;flex-direction:column;padding:4px 5px;box-sizing:border-box;overflow:hidden;margin-right:5px;}' +
-          '#barann-kb .kb-key .kb-cap{font-size:11px;color:#9fb3c6;font-weight:600;}' +
-          '#barann-kb .kb-key .kb-act{font-size:8.5px;line-height:1.05;margin-top:auto;color:#bcd;white-space:normal;}' +
-          '#barann-kb .kb-key.bound{background:#1c3145;border-color:#3f7fb0;}' +
-          '#barann-kb .kb-key.bound .kb-act{color:#d4e6f5;}' +
-          '#barann-kb .kb-key.ours{background:#2a2410;border-color:#d2a73a;}' +
-          '#barann-kb .kb-key.ours .kb-act{color:#ffd877;}' +
-          '#barann-kb .kb-key.modk{background:#22303f;}' +
-          '#barann-kb .kb-key.modk.held{background:#2f5a3a;border-color:#5fbf7f;color:#bfffce;}' +
-          '#barann-kb .kb-key.wide{width:auto;min-width:56px;flex:1;}' +
-          '#barann-kb .legend{margin-top:10px;font-size:10px;color:#8aa3b8;display:flex;}' +
-          '#barann-kb .legend span{margin-right:18px;}' +
-          '#barann-kb .swatch{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:middle;}';
-        var style = document.createElement('style');
-        style.id = 'barann-overlay-style'; style.textContent = css; document.head.appendChild(style);
+      function ensurePanel() {
+        if (el && document.getElementById(PANEL_ID)) return el;
+        var stale = document.getElementById(PANEL_ID);
+        if (stale) { try { $(stale).remove(); } catch (e) {} }
+        el = document.createElement('panel');                // MUST be <panel>, not <div>
+        el.id = PANEL_ID;
+        el.setAttribute('src', SRC);
+        el.setAttribute('fit', 'dock');                      // full viewport (like PA #popup / #settings)
+        el.setAttribute('no-input', '');                     // passive: mouse passes through to the world
+        el.setAttribute('no-keyboard', '');                  // keep keys on the host so our toggle / Esc still fire
+        el.style.cssText = 'position:absolute;left:0;top:0;width:100%;height:100%;z-index:1500;';
+        document.body.appendChild(el);
+        try { api.Panel.bindElement(el); log('overlay panel bound: ' + PANEL_ID + ' -> ' + SRC); }
+        catch (e) { err('overlay panel bind failed', e); }
+        return el;
       }
 
-      var MOD = 'modk';
-      var ROWS = [
-        [['esc','Esc'],['f1','F1'],['f2','F2'],['f3','F3'],['f4','F4'],['f5','F5'],['f6','F6'],['f7','F7'],['f8','F8'],['f9','F9'],['f10','F10'],['f11','F11'],['f12','F12']],
-        [['`','`'],['1','1'],['2','2'],['3','3'],['4','4'],['5','5'],['6','6'],['7','7'],['8','8'],['9','9'],['0','0'],['-','-'],['=','='],['backspace','Bksp','wide']],
-        [['tab','Tab','wide'],['q','Q'],['w','W'],['e','E'],['r','R'],['t','T'],['y','Y'],['u','U'],['i','I'],['o','O'],['p','P'],['[','['],[']',']'],['\\','\\']],
-        [['capslock','Caps','wide',MOD],['a','A'],['s','S'],['d','D'],['f','F'],['g','G'],['h','H'],['j','J'],['k','K'],['l','L'],[';',';'],['\'','\''],['enter','Enter','wide']],
-        [['shift','Shift','wide',MOD],['z','Z'],['x','X'],['c','C'],['v','V'],['b','B'],['n','N'],['m','M'],[',',','],['.','.'],['/','/'],['shift','Shift','wide',MOD]],
-        [['ctrl','Ctrl','wide',MOD],['alt','Alt','wide',MOD],['space','Space','wide'],['alt','Alt','wide',MOD],['ctrl','Ctrl','wide',MOD]]
-      ];
+      function show() { ensurePanel(); if (el) el.style.display = ''; visible = true; log('overlay -> shown (panel view)'); }
+      function hide() { if (el) el.style.display = 'none'; visible = false; log('overlay -> hidden'); }
 
-      var ALIAS = { 'return':'enter','escape':'esc','del':'delete','spacebar':'space','control':'ctrl','option':'alt' };
-      function locStrip(s) { return s ? String(s).replace(/^!LOC:/, '') : ''; }
-      function escapeHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-      function currentCombo() { var a=[]; if(mods.ctrl)a.push('ctrl'); if(mods.alt)a.push('alt'); if(mods.shift)a.push('shift'); return a.join('+'); }
-
-      function parseKeyStr(str) {
-        if (!str || typeof str !== 'string') return null;
-        var parts = str.toLowerCase().split('+'), m = { ctrl:false, alt:false, shift:false }, base = null;
-        for (var i = 0; i < parts.length; i++) {
-          var p = parts[i].trim();
-          if (p === 'ctrl' || p === 'control') m.ctrl = true;
-          else if (p === 'alt' || p === 'option') m.alt = true;
-          else if (p === 'shift') m.shift = true;
-          else if (p === 'mod' || p === 'meta' || p === 'cmd' || p === 'command') { /* ignore meta */ }
-          else if (p) base = ALIAS[p] || p;
-        }
-        if (!base) return null;
-        var a = []; if (m.ctrl) a.push('ctrl'); if (m.alt) a.push('alt'); if (m.shift) a.push('shift');
-        return { mod: a.join('+'), base: base };
-      }
-
-      function buildIndex() {
-        var idx = {};
-        function add(mod, base, label, ours) { if (!base) return; (idx[mod] = idx[mod] || {}); if (!idx[mod][base] || ours) idx[mod][base] = { label: label, ours: !!ours }; }
-        try {
-          var defs = api.settings && api.settings.definitions && api.settings.definitions.keyboard && api.settings.definitions.keyboard.settings;
-          if (defs) {
-            for (var k in defs) {
-              if (!defs.hasOwnProperty(k)) continue;
-              var d = defs[k]; if (!d || d.type !== 'keybind') continue;
-              var val = null;
-              try { if (api.settings.value) val = api.settings.value('keyboard', k); } catch (e) {}
-              if (!val) val = d.default;
-              if (!val) continue;
-              var vals = (val instanceof Array) ? val : [val];
-              for (var vi = 0; vi < vals.length; vi++) { var pk = parseKeyStr(vals[vi]); if (pk) add(pk.mod, pk.base, locStrip(d.title || k), false); }
-            }
-          }
-        } catch (e) { warn('overlay: PA keybind read failed: ' + (e && e.message)); }
-        var ours = (window.BarAnnihilation && BarAnnihilation.binds) || {};
-        for (var key in ours) { if (!ours.hasOwnProperty(key)) continue; var pk2 = parseKeyStr(key); if (pk2) add(pk2.mod, pk2.base, ours[key], true); }
-        return idx;
-      }
-
-      function ensureRoot() {
-        if ($root) return;
-        $root = $('<div id="barann-overlay"><div id="barann-kb">' +
-          '<div class="kb-title">BAR Annihilation — Key Bindings</div>' +
-          '<div class="kb-sub" id="barann-kb-sub"></div>' +
-          '<div id="barann-kb-rows"></div>' +
-          '<div class="legend">' +
-          '<span><span class="swatch" style="background:#1c3145;border:1px solid #3f7fb0;"></span>PA action</span>' +
-          '<span><span class="swatch" style="background:#2a2410;border:1px solid #d2a73a;"></span>BAR Annihilation (overrides PA)</span>' +
-          '<span><span class="swatch" style="background:#2f5a3a;border:1px solid #5fbf7f;"></span>modifier held</span>' +
-          '<span>Esc to close</span></div>' +
-          '</div></div>');
-        $('body').append($root);
-      }
-
-      function render() {
-        if (!$root) return;
-        if (!idxCache) idxCache = buildIndex();
-        var combo = currentCombo(), layer = idxCache[combo] || {};
-        var $rows = $root.find('#barann-kb-rows').empty();
-        for (var r = 0; r < ROWS.length; r++) {
-          var $row = $('<div class="kb-row"></div>');
-          for (var c = 0; c < ROWS[r].length; c++) {
-            var cell = ROWS[r][c], token = cell[0], cap = cell[1], classes = 'kb-key';
-            for (var x = 2; x < cell.length; x++) classes += ' ' + cell[x];
-            var $k = $('<div class="' + classes + '"></div>').append('<div class="kb-cap">' + cap + '</div>');
-            var isMod = (token === 'ctrl' || token === 'alt' || token === 'shift');
-            if (isMod) {
-              if ((token === 'ctrl' && mods.ctrl) || (token === 'alt' && mods.alt) || (token === 'shift' && mods.shift)) $k.addClass('held');
-            } else {
-              var b = layer[token];
-              if (b) { $k.addClass('bound'); if (b.ours) $k.addClass('ours'); $k.append('<div class="kb-act">' + escapeHtml(b.label) + '</div>'); }
-            }
-            $row.append($k);
-          }
-          $rows.append($row);
-        }
-        $root.find('#barann-kb-sub').text(combo ? ('Layer: ' + combo.toUpperCase().replace(/\+/g, ' + ')) : 'Base layer — hold Ctrl / Shift / Alt to see those layers');
-      }
-
-      function show() {
-        ensureRoot(); idxCache = null; visible = true; $root.addClass('show'); render();
-        try {
-          var el = $root[0], kb = $root.find('#barann-kb')[0];
-          var cs = window.getComputedStyle(el), r = el.getBoundingClientRect();
-          var kr = kb ? kb.getBoundingClientRect() : null;
-          log('overlay geom: pos=' + cs.position + ' disp=' + cs.display +
-              ' rect=' + Math.round(r.width) + 'x' + Math.round(r.height) + '@' + Math.round(r.left) + ',' + Math.round(r.top) +
-              ' kbRect=' + (kr ? Math.round(kr.width) + 'x' + Math.round(kr.height) : 'none'));
-        } catch (e) {}
-      }
-      function hide() { visible = false; mods.ctrl = mods.alt = mods.shift = false; if ($root) $root.removeClass('show'); }
       var toggleLock = false;
       function toggle() {
-        if (toggleLock) return;            // collapse double-dispatch (Mousetrap + raw) for one physical press
+        if (toggleLock) return;                              // collapse Mousetrap + raw double-dispatch for one press
         toggleLock = true; setTimeout(function () { toggleLock = false; }, 0);
         if (visible) hide(); else show();
-        log('overlay toggle -> ' + (visible ? 'shown' : 'hidden'));
       }
-      BarAnnihilation.overlayToggle = toggle; // also bound to backslash via bar-binds (Mousetrap, blocks PA)
+      BarAnnihilation.overlayToggle = toggle;                // bound to the backslash key via bar-binds (Mousetrap)
 
-      function updMods(e, down) {
-        var nc = e.ctrlKey, na = e.altKey, ns = e.shiftKey, ch = false;
-        if (e.which === 17) nc = down; if (e.which === 18) na = down; if (e.which === 16) ns = down;
-        if (nc !== mods.ctrl) { mods.ctrl = nc; ch = true; } if (na !== mods.alt) { mods.alt = na; ch = true; } if (ns !== mods.shift) { mods.shift = ns; ch = true; }
-        return ch;
-      }
-
+      var TOGGLE_WHICH = 220; // backslash key code (raw-keydown fallback; Mousetrap path is primary)
       $(document).on('keydown.barAnnOverlay', function (e) {
         if (e.which === TOGGLE_WHICH && !e.ctrlKey && !e.altKey && !e.shiftKey) { e.preventDefault(); toggle(); return false; }
-        if (!visible) return;
-        if (e.which === 27) { hide(); return false; } // Esc closes
-        if (updMods(e, true)) render();
+        if (visible && e.which === 27) { hide(); return false; } // Esc closes
       });
-      $(document).on('keyup.barAnnOverlay', function (e) { if (visible && updMods(e, false)) render(); });
 
-      log('keyboard overlay ready — press \\ (backslash) to toggle; hold Ctrl/Shift/Alt for layers');
+      log('keyboard overlay ready (panel view)');
     }
   });
+
 })();
