@@ -194,7 +194,6 @@
           if (nav.page > grid.pages) nav.page = grid.pages;
           var off = (nav.page - 1) * 12;
           for (var s = 0; s < 12; s++) { var e = list[off + s]; if (e) put(s, e); }
-          if (grid.pages > 1) grid.sub = 'Page ' + nav.page + '/' + grid.pages;
 
         } else if (nav.category === null) {
           grid.mode = 'home';
@@ -217,7 +216,7 @@
           if (nav.page > grid.pages) nav.page = grid.pages;
           var o2 = (nav.page - 1) * 12;
           for (var i2 = 0; i2 < 12; i2++) { var e2 = l2[o2 + i2]; if (e2) put(FILL_ORDER[i2], e2); }
-          grid.sub = CAT_LABELS[cidx] + (grid.pages > 1 ? (' ' + nav.page + '/' + grid.pages) : '');
+          grid.sub = CAT_LABELS[cidx];
         }
 
         grid.cells = cells; grid.entries = entries;
@@ -255,7 +254,7 @@
       function pushGrid() {
         var p = api.panels[PANEL_ID];
         if (!p || p.id === undefined || p.id < 0) return;
-        var payload = { open: grid.open, mode: grid.mode, cells: grid.cells, caps: CAPS, title: grid.title, sub: grid.sub };
+        var payload = { open: grid.open, mode: grid.mode, cells: grid.cells, caps: CAPS, title: grid.title, sub: grid.sub, page: nav.page, pages: grid.pages };
         var s = JSON.stringify(payload);
         if (s === lastPush) return;
         lastPush = s;
@@ -423,7 +422,7 @@
         showPanel(TIP_ID, true);
       }
       var H = (typeof handlers !== 'undefined' && handlers) ? handlers : (window.handlers || null);
-      if (H) { H['grid:click'] = onCellClick; H['grid:hover'] = onHover; H['grid:back'] = function () { goHome(); }; }
+      if (H) { H['grid:click'] = onCellClick; H['grid:hover'] = onHover; H['grid:back'] = function () { goHome(); }; H['grid:page'] = function () { nextPage(); }; }
       else BA.warn('gridmenu: no handlers map — clicks/hover will not route');
 
       // --- boot --------------------------------------------------------------
