@@ -226,7 +226,10 @@
       if (H) { H['overlay:close'] = hide; H['overlay:toggle'] = toggle; }   // child clicks: backdrop->close, button->toggle
       ensurePanel();   // pre-create the overlay panel (hidden) so the first open is instant
       ensureButton();
-      if (BA.drag) BA.drag.makeDraggable(BTN_ID, 'keysbtn');   // drag to reposition; remembers where you put it
+      // Keys button is LOCKED at its baked default position (above). To make it
+      // draggable again, re-add: BA.drag.makeDraggable(BTN_ID, 'keysbtn'); and
+      // restore the press-and-drag handler in keys_button.html. BA.drag stays
+      // available in core.js for other panels (e.g. the build menu) later.
 
       BA.log('keyboard overlay ready (panel view) — backslash or the top-right "Keys" button to toggle; click outside / Esc to close');
     }
