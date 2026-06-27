@@ -8,13 +8,15 @@
   // (bar-src/luaui/Include/select_api.lua) on PA's client API.
   // Exposed as BA.select.run(spec). Design: docs/SELECT-ENGINE.md.
   //
-  // TIERS:
-  //   sync   — def traits from model.unitSpecs (SpecCache). No async cost.
-  //   spec   — async $.get('spec:'+id) blueprint (unit_types/recon/tools), memoized
-  //            forever per spec. Drives category/aircraft/radar/jammer/antiair/
-  //            weaponrange. (PENDING — needs the live data-shape probe; see probe.js.)
-  //   state  — async getUnitState (per-unit pos) for FromMouse/closest. (PENDING.)
-  //   group  — shadow tracker over captureGroup/forgetGroup. (PENDING.)
+  // TIERS (data-shapes confirmed via probe.js, 2026-06-27):
+  //   sync   — def traits from model.unitSpecs incl. `types` (the unit_types array).
+  //            Drives most filters incl. the whole category tier (aircraft/radar/
+  //            jammer/category/weaponrange). No async cost.
+  //   spec   — async $.get('spec:'+id) blueprint + nested tool fetch, memoized per
+  //            spec forever. Drives antiAir (weapon target_layers ⊇ WL_Air, not flyer).
+  //   state  — async getUnitState (per-unit pos) for FromMouse_d / SelectClosestToCursor.
+  //   group  — shadow tracker wrapping captureGroup/forgetGroup -> InHotkeyGroup/InGroup.
+  //   (Visible is the only deferred tier: needs a mutate-and-restore on-screen hack.)
   //
   // FIDELITY (verified vs select_api.lua):
   //   * append DEFAULTS TRUE in BAR; ClearSelection_ -> replace. Each preset passes
@@ -78,6 +80,111 @@
         return t;
       }
 
+      // ---- async spec-blueprint tier --------------------------------------
+      // $.get('spec:'+id) (probe-confirmed) returns the merged blueprint whose tools[]
+      // are refs; a nested fetch of each tool yields target_layers (["WL_Air"] = can hit
+      // air). Computes traits the sync unit_specs push lacks. Memoized per spec forever.
+      var bpCache = {};   // spec -> { antiair } (resolved async)
+      function getJSON(path) {   // -> thenable resolving parsed-object|null (tries spec: then /)
+        return { then: function (res) {
+          if (typeof $ === 'undefined' || !$.get) { res(null); return; }
+          function parse(d) { var o = d; try { if (typeof d === 'string') o = JSON.parse(d); } catch (e) {} return o; }
+          var p; try { p = $.get('spec:' + path); } catch (e) { res(null); return; }
+          if (!p || !p.done) { res(null); return; }
+          p.done(function (d) { res(parse(d)); }).fail(function () {
+            var q; try { q = $.get('/' + path); } catch (e) { res(null); return; }
+            if (!q || !q.done) { res(null); return; }
+            q.done(function (d) { res(parse(d)); }).fail(function () { res(null); });
+          });
+        } };
+      }
+      function blueprintTraits(spec, cb) {     // resolve + memoize one spec's async traits
+        if (bpCache[spec] !== undefined) { cb(bpCache[spec]); return; }
+        getJSON(spec).then(function (bp) {
+          if (!bp) { bpCache[spec] = {}; cb(bpCache[spec]); return; }
+          var tools = bp.tools || [], paths = [];
+          for (var i = 0; i < tools.length; i++) if (tools[i] && tools[i].spec_id) paths.push(tools[i].spec_id);
+          var isAir = hasType(specOf(spec).types, 'Air');
+          if (!paths.length) { bpCache[spec] = { antiair: false }; cb(bpCache[spec]); return; }
+          var calls = []; for (var j = 0; j < paths.length; j++) calls.push(getJSON(paths[j]));
+          allThen(calls, function (toolDefs) {
+            var aa = false;
+            for (var k = 0; k < toolDefs.length; k++) { var td = toolDefs[k]; if (td && td.target_layers && inArr(td.target_layers, 'WL_Air')) aa = true; }
+            bpCache[spec] = { antiair: aa && !isAir };   // BAR antiAir excludes flyers (select_api.lua:248)
+            cb(bpCache[spec]);
+          });
+        });
+      }
+      function resolveBlueprints(specs, done) {
+        var todo = []; for (var i = 0; i < specs.length; i++) if (bpCache[specs[i]] === undefined && todo.indexOf(specs[i]) < 0) todo.push(specs[i]);
+        if (!todo.length) { done(); return; }
+        var n = todo.length, k = 0;
+        for (var i = 0; i < n; i++) blueprintTraits(todo[i], function () { if (++k === n) done(); });
+      }
+
+      // ---- position tier: cursor world-pos + per-unit positions -----------
+      // FromMouse / SelectClosestToCursor need the cursor world pos (raycastTerrain ->
+      // {pos:[x,y,z]}, probed) and per-unit pos (getUnitState.pos, probed). PA has no
+      // cursor API, so we track the pointer ourselves off the full-screen host document
+      // (client==offset there); apply ui_scale exactly as PA's scaleMouseEvent does.
+      var lastMouse = { x: ((window.innerWidth || 1920) / 2), y: ((window.innerHeight || 1080) / 2) };
+      var cursorTracked = false;
+      function installCursorTracking() {
+        if (cursorTracked) return; cursorTracked = true;
+        document.addEventListener('mousemove', function (e) { lastMouse.x = e.clientX; lastMouse.y = e.clientY; }, true);
+      }
+      function uiScale() { try { var s = (model.uiScale ? (typeof model.uiScale === 'function' ? model.uiScale() : model.uiScale) : 1); return s || 1; } catch (e) { return 1; } }
+      function holo() { try { return api.Holodeck.focused; } catch (e) { return null; } }
+      function mouseWorldPos(cb) {            // -> [x,y,z] | null
+        var h = holo(); if (!h || !h.raycastTerrain) { cb(null); return; }
+        var sc = uiScale(), r;
+        try { r = h.raycastTerrain(Math.floor(lastMouse.x * sc), Math.floor(lastMouse.y * sc)); } catch (e) { cb(null); return; }
+        if (r && r.then) r.then(function (hit) { cb(hit && hit.pos ? hit.pos : null); }, function () { cb(null); });
+        else cb(r && r.pos ? r.pos : null);
+      }
+      function positionsOf(ids, cb) {         // -> { id: [x,y,z] }
+        var wv = worldView(); if (!wv || !wv.getUnitState || !ids.length) { cb({}); return; }
+        wv.getUnitState(ids).then(function (sm) {
+          var m = {}; if (sm) for (var i = 0; i < ids.length; i++) { var st = sm[ids[i]] || sm[i]; if (st && st.pos) m[ids[i]] = st.pos; } cb(m);
+        }, function () { cb({}); });
+      }
+      function dist2(a, b) { var dx = a[0] - b[0], dy = a[1] - b[1], dz = a[2] - b[2]; return dx * dx + dy * dy + dz * dz; }
+      function dist2xz(a, b) { var dx = a[0] - b[0], dz = a[2] - b[2]; return dx * dx + dz * dz; }
+      // FromMouse_d (sphere) / FromMouseCylinder_d (xz disc): own units within radius d of cursor.
+      function fromMouseSource(arg, cylinder) {
+        var d = Number(arg) || 0;
+        return { then: function (cb) {
+          whenThen(allmapSource(), function (pairs) {
+            pairs = pairs || []; if (!pairs.length) { cb([]); return; }
+            mouseWorldPos(function (mp) {
+              if (!mp) { BA.warn('select: FromMouse — no cursor world pos'); cb([]); return; }
+              var ids = []; for (var i = 0; i < pairs.length; i++) ids.push(pairs[i].id);
+              positionsOf(ids, function (pm) {
+                var out = [], r2 = d * d;
+                for (var i = 0; i < pairs.length; i++) { var q = pm[pairs[i].id]; if (!q) continue; var dd = cylinder ? dist2xz(q, mp) : dist2(q, mp); if (dd <= r2) out.push(pairs[i]); }
+                cb(out);
+              });
+            });
+          });
+        } };
+      }
+
+      // ---- group shadow tracker -------------------------------------------
+      // PA exposes no unit->group map, but native Ctrl+N and the control-group bar both
+      // route through api.select.capture/forget/recallGroup (inputmap.js:143-163), so we
+      // wrap them: capture REPLACES a group with the current selection, forget clears it.
+      // (Groups set before we wrap — e.g. the commander's auto group 1 — are invisible.)
+      var groupSets = {};   // groupNum -> { unitId: true }
+      function inAnyGroup(id) { for (var g in groupSets) { if (groupSets.hasOwnProperty(g) && groupSets[g][id]) return true; } return false; }
+      var groupsWrapped = false;
+      function wrapGroups() {
+        if (groupsWrapped || !api || !api.select) return; groupsWrapped = true;
+        var sel = api.select, oc = sel.captureGroup, of = sel.forgetGroup;
+        if (oc) sel.captureGroup = function (g) { var r = oc.apply(sel, arguments); try { var n = (typeof g === 'number') ? g : 0, set = {}, s = BA.util.readSelection(), ids = s ? s.ids : []; for (var i = 0; i < ids.length; i++) set[ids[i]] = true; groupSets[n] = set; BA.log('group: captured ' + ids.length + ' unit(s) into group ' + n); } catch (e) {} return r; };
+        if (of) sel.forgetGroup = function (g) { var r = of.apply(sel, arguments); try { var n = (typeof g === 'number') ? g : 0; delete groupSets[n]; } catch (e) {} return r; };
+        BA.log('group shadow tracker installed (capture/forget wrapped)');
+      }
+
       // ---- current selection helpers --------------------------------------
       function curSpecIds() { var s = BA.util.readSelection(); return (s && s.raw && s.raw.spec_ids) ? s.raw.spec_ids : {}; }
       function curIdSet() { var set = {}, s = BA.util.readSelection(), ids = s ? s.ids : []; for (var i = 0; i < ids.length; i++) set[ids[i]] = true; return set; }
@@ -99,9 +206,11 @@
       var SOURCES = {
         prevselection:     function () { return pairsFrom(curSpecIds()); },
         previousselection: function () { return pairsFrom(curSpecIds()); },   // BAR alias (select_api.lua:575)
-        allmap:            allmapSource
+        allmap:            allmapSource,
+        frommouse:         function (arg) { return fromMouseSource(arg, false); },   // FromMouse_d (sphere)
+        frommousecylinder: function (arg) { return fromMouseSource(arg, true); },    // FromMouseCylinder_d (xz disc)
+        frommousec:        function (arg) { return fromMouseSource(arg, true); }      // BAR alias FromMouseC_d
         // visible -> mutate-and-restore hack (flicker); deferred (research: no frustum query).
-        // frommouse_d / frommousecylinder_d -> position tier (getUnitState pos + raycast); PENDING.
       };
 
       // BAR modCategory / category-filter token -> PA UNITTYPE_* (probe: types is the
@@ -148,6 +257,7 @@
         radar:        function (inv) { return defPred(inv, function (u) { return hasType(u.t.types, 'Radar'); }); },
         jammer:       function (inv) { return defPred(inv, function (u) { return hasType(u.t.types, 'RadarJammer'); }); },
         weaponrange:  function (inv, a) { var n = Number(a) || 0; return defPred(inv, function (u) { return u.t.hasWeapons && u.t.maxRange > n; }); },
+        antiair:      function (inv) { return { needsSpec: true, needsState: false, test: function (u) { var r = !!(u.bp && u.bp.antiair); return inv ? !r : r; } }; },  // async tool target_layers WL_Air, not flyer
         category:     function (inv, a) {
           var key = String(a || '').toLowerCase(); var v = CATMAP[key] || (a ? a : null);
           if (!v) return null; var arr = (typeof v === 'string') ? [v] : v;
@@ -155,6 +265,8 @@
         },
         inprevsel:    function (inv) { return defPred(inv, function (u) { return !!_prevSet[u.id]; }); },           // literal currently-selected (spIsUnitSelected)
         inpreviousselection: function (inv) { return defPred(inv, function (u) { return !!_prevSet[u.id]; }); },
+        inhotkeygroup: function (inv) { return defPred(inv, function (u) { return inAnyGroup(u.id); }); },          // shadow tracker
+        ingroup:      function (inv, a) { var n = Number(a); if (isNaN(n)) return null; return defPred(inv, function (u) { return !!(groupSets[n] && groupSets[n][u.id]); }); },
         idmatches:    function (inv, a) { return defPred(inv, function (u) { return u.spec === a || specSeg(u.spec, a); }); },
         namecontain:  function (inv, a) { return defPred(inv, function (u) { return !!a && u.spec.indexOf(a) >= 0; }); }, // substring over spec path (~BAR udef.name)
         specin:       function (inv, set) { return defPred(inv, function (u) { return !!(set && set[u.spec]); }); }       // internal helper (same-type map-wide)
@@ -165,8 +277,8 @@
       // (per-unit HP and the C++ order queue are unreachable; cloak/stealth absent.)
       var WALL = { cloak: 1, cloaked: 1, stealth: 1, resurrect: 1, guarding: 1, waiting: 1, patrolling: 1,
                    idle: 1, absolutehealth: 1, relativehealth: 1 };
-      // Portable but not yet wired (async spec-tool tier: antiair; group shadow tier).
-      var PENDING = { antiair: 1, inhotkeygroup: 1, ingroup: 1 };
+      // All portable filters are now implemented; unknown names fall through to "unknown".
+      var PENDING = {};
 
       // ---- CONCLUSIONS ----------------------------------------------------
       // Faithful BAR getCountUnits (select_api.lua:410-454): one persistent circular
@@ -209,6 +321,18 @@
           if (picked.length) { try { if (api.camera && api.camera.track) api.camera.track(true); } catch (e) {} }  // center on the cycled unit
           return res;
         }
+        if (name === 'selectclosesttocursor') {   // async: nearest candidate to the cursor world pos
+          mouseWorldPos(function (mp) {
+            if (!mp || !ids.length) { selectIds([], append); return; }
+            positionsOf(ids, function (pm) {
+              var best = null, bd = Infinity;
+              for (var i = 0; i < ids.length; i++) { var q = pm[ids[i]]; if (!q) continue; var dd = dist2(q, mp); if (dd < bd) { bd = dd; best = ids[i]; } }
+              selectIds(best != null ? [best] : [], append);
+              BA.log('select: closest-to-cursor picked ' + (best != null ? 1 : 0));
+            });
+          });
+          return null;   // async; selection actuates in the callback above
+        }
         return selectIds(ids, append);   // selectall (default)
       }
 
@@ -223,49 +347,62 @@
           return;
         }
         _prevSet = curIdSet();
-        var preds = [], needState = false, defs = spec.filters || [], abort = null;
+        var preds = [], needState = false, needSpec = false, defs = spec.filters || [], abort = null;
         for (var i = 0; i < defs.length; i++) {
           var nm = (defs[i].name || '').toLowerCase();
           var fn = FILTERS[nm];
           if (!fn) { abort = (WALL[nm] ? 'not portable (grey out): ' : (PENDING[nm] ? 'PENDING async tier: ' : 'unknown filter: ')) + nm; break; }
           var p = fn(!!defs[i].invert, defs[i].arg);
           if (!p) { abort = 'filter arg unsupported: ' + nm + '_' + defs[i].arg; break; }
-          preds.push(p); if (p.needsState) needState = true;
+          preds.push(p); if (p.needsState) needState = true; if (p.needsSpec) needSpec = true;
         }
         if (abort) { BA.log('select: ABORT — ' + abort + ' (refusing to mis-select)'); return; }
 
+        // tier of a predicate = the stage it runs in (state > spec > sync).
+        function applyTier(u, tier) {
+          for (var j = 0; j < preds.length; j++) {
+            var pr = preds[j], pt = pr.needsState ? 'state' : (pr.needsSpec ? 'spec' : 'sync');
+            if (pt === tier && !pr.test(u)) return false;
+          }
+          return true;
+        }
         function finish(list) {
           var ids = []; for (var i = 0; i < list.length; i++) ids.push(list[i].id);
           var picked = conclude((spec.conclusion || 'selectall').toLowerCase(), spec.conclusionArg, ids, !!spec.append);
           BA.log('select: src=' + srcName + ' filt=' + defs.length + ' append=' + !!spec.append + ' kept=' + ids.length + ' picked=' + (picked ? picked.length : 0));
           return picked;
         }
+        function specStage(list, cb) {            // async: resolve blueprint traits per distinct spec
+          if (!needSpec) { cb(list); return; }
+          var specs = []; for (var i = 0; i < list.length; i++) if (specs.indexOf(list[i].spec) < 0) specs.push(list[i].spec);
+          resolveBlueprints(specs, function () {
+            var out = []; for (var i = 0; i < list.length; i++) { var u = list[i]; u.bp = bpCache[u.spec] || {}; if (applyTier(u, 'spec')) out.push(u); }
+            cb(out);
+          });
+        }
+        function stateStage(list, cb) {           // async: per-unit getUnitState (pos)
+          if (!needState) { cb(list); return; }
+          var ids = []; for (var i = 0; i < list.length; i++) ids.push(list[i].id);
+          var wv = worldView();
+          if (!wv || !wv.getUnitState || !ids.length) { BA.warn('select: runtime state needed but unavailable'); cb([]); return; }
+          wv.getUnitState(ids).then(function (sm) {
+            var out = []; for (var i = 0; i < list.length; i++) { var u = list[i]; u.state = sm ? (sm[u.id] || sm[i] || null) : null; if (applyTier(u, 'state')) out.push(u); }
+            cb(out);
+          });
+        }
         return whenThen(srcFn(spec.sourceArg), function (pairs) {
           pairs = pairs || [];
           var stage = [];
-          for (var i = 0; i < pairs.length; i++) {
-            var u = pairs[i]; u.t = specOf(u.spec); var ok = true;
-            for (var j = 0; j < preds.length; j++) { if (!preds[j].needsState && !preds[j].test(u)) { ok = false; break; } }
-            if (ok) stage.push(u);
-          }
-          if (!needState) return finish(stage);
-          var ids = []; for (var i = 0; i < stage.length; i++) ids.push(stage[i].id);
-          var wv = worldView();
-          if (!wv || !wv.getUnitState || !ids.length) { BA.warn('select: runtime state needed but unavailable'); return finish([]); }
-          return wv.getUnitState(ids).then(function (sm) {
-            var out = [];
-            for (var i = 0; i < stage.length; i++) {
-              var u = stage[i]; u.state = sm ? (sm[u.id] || sm[i] || null) : null; var ok = true;
-              for (var j = 0; j < preds.length; j++) { if (preds[j].needsState && !preds[j].test(u)) { ok = false; break; } }
-              if (ok) out.push(u);
-            }
-            return finish(out);
-          });
+          for (var i = 0; i < pairs.length; i++) { var u = pairs[i]; u.t = specOf(u.spec); if (applyTier(u, 'sync')) stage.push(u); }
+          specStage(stage, function (afterSpec) { stateStage(afterSpec, function (afterState) { finish(afterState); }); });
         });
       }
 
-      BA.select = { run: run, _specOf: specOf, _sources: SOURCES, _filters: FILTERS, _count: getCountUnits, _wall: WALL, _pending: PENDING };
-      BA.log('select-engine ready (sync def tier + faithful conclusions; async spec/state/group tiers PENDING probe)');
+      installCursorTracking();
+      wrapGroups();
+
+      BA.select = { run: run, _specOf: specOf, _blueprint: blueprintTraits, _mouseWorldPos: mouseWorldPos, _positionsOf: positionsOf, _sources: SOURCES, _filters: FILTERS, _count: getCountUnits, _groups: groupSets, _wall: WALL, _pending: PENDING };
+      BA.log('select-engine ready (def + category + antiAir + position + group tiers; Visible deferred)');
     }
   });
 })();

@@ -144,10 +144,29 @@
           }
         });
 
-        // (6) groups — capture/forget verbs + any readable membership signal.
+        // (6) groups — capture/forget verbs + the shadow tracker's captured membership.
         safe('groups', function () {
           out('group.verbs', { captureGroup: !!(api.select && api.select.captureGroup), recallGroup: !!(api.select && api.select.recallGroup), forgetGroup: !!(api.select && api.select.forgetGroup), recallGroupWithTypeFilter: !!(api.select && api.select.recallGroupWithTypeFilter) });
-          out('selectionGroupCounts', (model.selectionGroupCounts ? model.selectionGroupCounts() : 'n/a'));
+          var gs = (BA.select && BA.select._groups) ? BA.select._groups : null;
+          var counts = {}; if (gs) for (var g in gs) { if (gs.hasOwnProperty(g)) { var n = 0; for (var u in gs[g]) if (gs[g].hasOwnProperty(u)) n++; counts[g] = n; } }
+          out('group.shadowCounts', counts);   // assign Ctrl+1/Ctrl+2 BEFORE probing to populate this
+        });
+
+        // (6b) position tier — read-only: cursor world pos + closest unit among the
+        // current selection (hover the cursor near a unit before pressing Ctrl+Shift+P).
+        safe('positionTest', function () {
+          if (!BA.select || !BA.select._mouseWorldPos) { BA.log('PROBE positionTest: engine not ready'); return; }
+          function d2(a, b) { var dx = a[0] - b[0], dy = a[1] - b[1], dz = a[2] - b[2]; return dx * dx + dy * dy + dz * dz; }
+          BA.select._mouseWorldPos(function (mp) {
+            if (!mp) { out('positionTest', 'no cursor world pos'); return; }
+            var ids = sel ? sel.ids : [];
+            if (!ids.length) { out('positionTest', { cursorPos: mp, note: 'select units + hover near one to test closest' }); return; }
+            BA.select._positionsOf(ids, function (pm) {
+              var best = null, bd = Infinity, within = 0;
+              for (var i = 0; i < ids.length; i++) { var q = pm[ids[i]]; if (!q) continue; var dd = d2(q, mp); if (dd < bd) { bd = dd; best = ids[i]; } if (dd <= 200 * 200) within++; }
+              out('positionTest', { cursorPos: [Math.round(mp[0]), Math.round(mp[1]), Math.round(mp[2])], closestUnitId: best, closestDist: Math.round(Math.sqrt(bd)), within200: within, ofSelected: ids.length });
+            });
+          });
         });
 
         // (7) sanity: the sync engine self-test — def traits + CATEGORY classification
@@ -170,6 +189,12 @@
           }
           out('engineSelfTest', c);
           out('engineSelfTest.types', (function () { var o = {}; for (var s in specIds) { if (specIds.hasOwnProperty(s)) o[s.split('/').pop()] = BA.select._specOf(s).types; } return o; })());
+          // async antiAir over the selection (target_layers WL_Air, excluding flyers).
+          if (BA.select._blueprint) {
+            var specs = []; for (var s2 in specIds) if (specIds.hasOwnProperty(s2)) specs.push(s2);
+            var n = specs.length, k = 0, aa = 0;
+            if (n) specs.forEach(function (s) { BA.select._blueprint(s, function (bp) { if (bp && bp.antiair) aa += (specIds[s] || []).length; if (++k === n) out('engineSelfTest.antiair', { antiairUnits: aa }); }); });
+          }
         });
 
         BA.log('PROBE ===== end (async lines print above as they resolve) =====');
