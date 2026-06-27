@@ -15,6 +15,8 @@
     init: function () {
       var PANEL_ID = 'barann-overlay-panel';
       var SRC = 'coui://ui/mods/com.pa.stephenshorton.bar-annihilation/kb_overlay.html';
+      var BTN_ID = 'barann-keysbtn-panel';
+      var BTN_SRC = 'coui://ui/mods/com.pa.stephenshorton.bar-annihilation/keys_button.html';
       var TOGGLE_WHICH = 220; // backslash
       var visible = false, el = null, idx = null, pushTimer = null, layersCache = null;
       var mods = { ctrl: false, alt: false, shift: false };
@@ -139,6 +141,19 @@
         return el;
       }
 
+      // a persistent top-right button (own <panel>) that toggles the overlay
+      function ensureButton() {
+        if (document.getElementById(BTN_ID)) return;
+        var b = document.createElement('panel');
+        b.id = BTN_ID;
+        b.setAttribute('src', BTN_SRC);
+        b.setAttribute('no-keyboard', '');
+        b.style.cssText = 'position:absolute;top:8px;right:10px;width:96px;height:30px;z-index:1450;';
+        document.body.appendChild(b);
+        try { api.Panel.bindElement(b); BA.log('overlay keys-button bound'); }
+        catch (e) { BA.err('overlay keys-button bind failed', e); }
+      }
+
       function pushState() {
         var p = api.panels[PANEL_ID];
         if (!p || p.id === undefined || p.id < 0) return;    // wait until panel.create resolved
@@ -198,9 +213,10 @@
       document.addEventListener('keyup', onKeyUpCap, true);
 
       var H = (typeof handlers !== 'undefined' && handlers) ? handlers : (window.handlers || null);
-      if (H) H['overlay:close'] = hide;   // child reports a backdrop click -> close
+      if (H) { H['overlay:close'] = hide; H['overlay:toggle'] = toggle; }   // child clicks: backdrop->close, button->toggle
+      ensureButton();
 
-      BA.log('keyboard overlay ready (panel view) — backslash or the grid menu "Keys" button to toggle; click outside / Esc to close');
+      BA.log('keyboard overlay ready (panel view) — backslash or the top-right "Keys" button to toggle; click outside / Esc to close');
     }
   });
 })();

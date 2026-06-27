@@ -1,0 +1,40 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+  <meta locns="live_game" />
+  <noloc><title>BAR Annihilation: Keys Button</title></noloc>
+  <link href="bundle://boot/boot.css" rel="stylesheet" type="text/css" />
+  <script src="bundle://boot/boot.js" type="text/javascript"></script>
+  <style>
+    html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; }
+    body.body_panel { background:transparent; font-family:Exo,"Segoe UI",sans-serif; }
+    .kbtn-b { position:absolute; left:0; top:0; right:0; bottom:0; box-sizing:border-box;
+              display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:600;
+              color:#cfe3f2; background:rgba(14,20,28,0.9); border:1px solid #2b6c9c; cursor:pointer; letter-spacing:.05em; }
+    .kbtn-b:hover { background:rgba(95,168,224,0.45); border-color:#5fa8e0; color:#fff; }
+  </style>
+</head>
+<body class="body_panel">
+  <!-- A persistent top-right button (its own panel; the host live_game DOM never paints).
+       Click toggles the keyboard overlay via the parent (overlay.js handlers['overlay:toggle']). -->
+  <div class="kbtn-b" data-action="toggle">Keys</div>
+  <script type="text/javascript">
+    var model = {}, handlers = {};
+    $(document).ready(function () {
+      document.addEventListener('mousedown', function (e) {
+        var t = e.target;
+        while (t && t.getAttribute) {
+          if (t.getAttribute('data-action') === 'toggle') {
+            e.preventDefault();
+            try { if (window.api && api.Panel && api.Panel.query) api.Panel.query(api.Panel.parentId, 'overlay:toggle', {}); } catch (err) {}
+            return;
+          }
+          t = t.parentNode;
+        }
+      }, false);
+      app.registerWithCoherent(model, handlers);
+    });
+  </script>
+</body>
+</html>
