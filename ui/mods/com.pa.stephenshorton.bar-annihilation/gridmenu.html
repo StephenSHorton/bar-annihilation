@@ -33,8 +33,10 @@
                text-shadow:0 0 3px #000, 0 0 3px #000; }
     .gm-q { position:absolute; right:4px; bottom:2px; font-size:12px; font-weight:700; color:#bfffce;
             text-shadow:0 0 3px #000, 0 0 3px #000; }
-    .gm-hint { margin-top:6px; font-size:9px; color:#7f93a6; }
     .gm-sub { color:#9fc3dd; font-size:10px; font-weight:400; margin-left:6px; text-transform:none; }
+    .gm-back { margin-top:6px; display:inline-block; padding:3px 12px; font-size:11px; font-weight:600;
+               color:#dcefff; background:rgba(43,108,156,0.35); border:1px solid #2b6c9c; cursor:pointer; letter-spacing:.03em; }
+    .gm-back:hover { background:rgba(95,168,224,0.45); border-color:#5fa8e0; }
     .gm-cell.gm-cat { border-color:#5fa8e0; box-shadow:inset 0 0 0 1px rgba(95,168,224,.4); }
     .gm-cell.gm-prev { opacity:.55; }
     .gm-cell.gm-prev .gm-img { filter:grayscale(35%); }
@@ -90,15 +92,12 @@
         for (var c = 0; c < 4; c++) { var i = r * 4 + c; rows += cellHtml(p.cells[i], caps[i], i); }
         rows += '</div>';
       }
-      var hint;
-      if (p.mode === 'home') hint = 'Z X C V: open category';
-      else if (p.mode === 'category') hint = 'Key/click to place &middot; B: page &middot; Esc/Shift: back';
-      else hint = 'L +1 &middot; Shift &times;5 &middot; Ctrl &times;20 &middot; RMB cancel &middot; Space front' + (p.sub ? ' &middot; B: page' : '');
       var title = esc(p.title || 'Build') + (p.sub ? '<span class="gm-sub">' + esc(p.sub) + '</span>' : '');
+      var foot = (p.mode === 'category') ? '<div class="gm-back" data-action="back">&#8592; Shift</div>' : '';
       root.innerHTML = '<div class="gm-wrap">'
         + '<div class="gm-title">' + title + '</div>'
         + rows
-        + '<div class="gm-hint">' + hint + '</div></div>';
+        + foot + '</div>';
     }
 
     var lastHover = -2;
@@ -114,6 +113,11 @@
     function routeClick(e) {
       var t = e.target;
       while (t && t.getAttribute) {
+        if (t.getAttribute('data-action') === 'back') {
+          e.preventDefault();
+          try { if (window.api && api.Panel && api.Panel.query) api.Panel.query(api.Panel.parentId, 'grid:back', {}); } catch (err) {}
+          return;
+        }
         var s = t.getAttribute('data-slot');
         if (s !== null) {
           e.preventDefault();

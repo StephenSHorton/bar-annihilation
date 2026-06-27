@@ -384,7 +384,7 @@
         showPanel(TIP_ID, true);
       }
       var H = (typeof handlers !== 'undefined' && handlers) ? handlers : (window.handlers || null);
-      if (H) { H['grid:click'] = onCellClick; H['grid:hover'] = onHover; }
+      if (H) { H['grid:click'] = onCellClick; H['grid:hover'] = onHover; H['grid:back'] = function () { goHome(); }; }
       else BA.warn('gridmenu: no handlers map — clicks/hover will not route');
 
       // --- boot --------------------------------------------------------------
