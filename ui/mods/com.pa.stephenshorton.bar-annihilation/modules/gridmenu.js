@@ -277,6 +277,12 @@
       if (pushTimer) clearInterval(pushTimer);
       pushTimer = setInterval(tick, 150);
       tick();
+      // React to selection the instant PA processes it: model.selection is a ko
+      // observable set at the end of parseSelection, and ko notifies subscribers
+      // synchronously BEFORE the browser repaints — so we add the hide-class in the
+      // same frame the native build bar would appear. Kills the select-commander flash.
+      try { if (model.selection && model.selection.subscribe) model.selection.subscribe(tick); }
+      catch (e) { BA.warn('gridmenu: selection subscribe failed: ' + (e && e.message)); }
       BA.log('gridmenu ready (M3) — factory: key/click build (Shift x5, Ctrl cancel(key)/x20(click), RMB cancel, Space=front); fabber: key/click enters placement, then click map to place; hover for info');
     }
   });
