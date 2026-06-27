@@ -55,7 +55,7 @@
         cats: null, flat: null, orders: {},          // raw data
         cells: null, entries: null, mode: 'factory', sub: '', pages: 1   // rendered
       };
-      var nav = { category: null, page: 1, peek: false };   // user navigation state
+      var nav = { category: null, page: 1 };   // user navigation state
       var spaceHeld = false;   // factory: hold Space = front of queue
       var diagged = {};
 
@@ -257,12 +257,12 @@
         var g = null;
         try { g = rawCompute(); } catch (e) { BA.warn('gridmenu compute failed: ' + (e && e.message)); }
         if (g) {
-          if (g.builderKey !== grid.builderKey) { nav.category = null; nav.page = 1; nav.peek = false; }
+          if (g.builderKey !== grid.builderKey) { nav.category = null; nav.page = 1; }
           grid.open = true; grid.isFactory = g.isFactory; grid.cats = g.cats || null; grid.flat = g.flat || null;
           grid.orders = g.orders || {}; grid.title = g.title; grid.builderKey = g.builderKey;
         } else {
           grid.open = false; grid.cats = null; grid.flat = null; grid.cells = null; grid.entries = null; grid.builderKey = null;
-          nav.category = null; nav.page = 1; nav.peek = false;
+          nav.category = null; nav.page = 1;
         }
         if (grid.open !== lastOpen) {
           lastOpen = grid.open;
@@ -275,14 +275,14 @@
       }
 
       // --- navigation --------------------------------------------------------
-      function openCategory(cat, peek) {
+      function openCategory(cat) {
         if (grid.isFactory || !grid.cats || !grid.cats[cat] || !grid.cats[cat].length) return;
-        nav.category = cat; nav.page = 1; nav.peek = !!peek;
+        nav.category = cat; nav.page = 1;
         showPanel(TIP_ID, false); repaint();
       }
       function goHome() {
         if (grid.isFactory || nav.category === null) return;
-        nav.category = null; nav.page = 1; nav.peek = false;
+        nav.category = null; nav.page = 1;
         showPanel(TIP_ID, false); repaint();
       }
       function nextPage() {
@@ -331,7 +331,7 @@
         var slot = KEYCODE_TO_SLOT[w];
         // mobile + home: Z X C V open categories; the rest are inert
         if (!grid.isFactory && nav.category === null) {
-          if (slot >= 8 && !e.ctrlKey && !e.altKey) openCategory(slot - 8, e.shiftKey);
+          if (slot >= 8 && !e.ctrlKey && !e.altKey) openCategory(slot - 8);
           return false;
         }
         var cell = grid.cells && grid.cells[slot];
@@ -344,7 +344,7 @@
         if (!grid.open) return;
         var w = e.which;
         if (w === KEY_SPACE) { spaceHeld = false; if (grid.isFactory) { consume(e); return false; } return; }
-        if (w === KEY_SHIFT) { if (nav.peek && nav.category !== null) goHome(); return; }
+        if (w === KEY_SHIFT) { if (nav.category !== null) goHome(); return; }   // BAR: releasing Shift always returns home
         if (!isGridKey(e)) return;
         consume(e); return false;
       }
@@ -355,7 +355,7 @@
       function onCellClick(payload) {
         if (!grid.open || !payload) return;
         var slot = payload.slot;
-        if (grid.mode === 'home') { if (slot != null && slot >= 0) openCategory(slot % 4, false); return; }
+        if (grid.mode === 'home') { if (slot != null && slot >= 0) openCategory(slot % 4); return; }
         var cell = grid.cells && grid.cells[slot];
         if (!cell) return;
         if (grid.mode === 'category' && payload.button === 2) { goHome(); return; }   // RMB = back
