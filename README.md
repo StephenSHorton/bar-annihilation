@@ -18,7 +18,7 @@ Coherent UI layer.
 | Path | What it is |
 |---|---|
 | `modinfo.json` | PA client-mod manifest (injects into the `live_game` scene) |
-| `ui/mods/com.pa.stephenshorton.bar-annihilation/live_game.js` | Entry point / module bootstrap |
+| `ui/mods/com.pa.stephenshorton.bar-annihilation/core.js` | Entry point / module bootstrap (defines `window.BarAnnihilation`, loaded first) |
 | `ui/mods/com.pa.stephenshorton.bar-annihilation/modules/` | One file per control feature (added per roadmap) |
 | `docs/BAR-Control-Scheme-Catalog.md` | **The spec** — ~225 BAR control features from source, each with default bind, engine `CMD.*` vs widget, source file, and a PA-porting triage |
 | `docs/ROADMAP.md` | Build order, grouped by porting difficulty |

@@ -12,6 +12,12 @@
   "github": "https://github.com/StephenSHorton/bar-annihilation",
   "signature": " ",
   "scenes": {
-    "live_game": ["coui://ui/mods/com.pa.stephenshorton.bar-annihilation/live_game.js"]
+    "live_game": [
+      "coui://ui/mods/com.pa.stephenshorton.bar-annihilation/core.js",
+      "coui://ui/mods/com.pa.stephenshorton.bar-annihilation/modules/select-engine.js",
+      "coui://ui/mods/com.pa.stephenshorton.bar-annihilation/modules/selection-binds.js",
+      "coui://ui/mods/com.pa.stephenshorton.bar-annihilation/modules/overlay.js",
+      "coui://ui/mods/com.pa.stephenshorton.bar-annihilation/modules/probe.js"
+    ]
   }
 }
