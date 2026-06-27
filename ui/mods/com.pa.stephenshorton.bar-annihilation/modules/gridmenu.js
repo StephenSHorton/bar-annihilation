@@ -30,7 +30,7 @@
       var TIP_SRC = 'coui://ui/mods/com.pa.stephenshorton.bar-annihilation/tooltip.html';
 
       // layout geometry (px)
-      var GX = 12, GY = 200, GW = 336, GH = 252;          // grid panel
+      var GX = 12, GY = 300, GW = 336, GH = 252;          // grid panel
       var TIPX = GX + GW + 8, TIPW = 300, TIPH = 260;     // tooltip panel (to the right)
 
       // grid keys in VISUAL reading order (top-left -> bottom-right); index = slot.
@@ -241,6 +241,7 @@
         var slot = payload.slot;
         var entry = (slot != null && slot >= 0 && grid.entries) ? grid.entries[slot] : null;
         var info = tipFor(entry);
+        BA.log('gridmenu onHover slot=' + slot + ' name=' + (info && info.name));
         if (!info) { showPanel(TIP_ID, false); return; }
         var p = api.panels[TIP_ID];
         if (p && p.id >= 0) { try { p.message('tip:show', info); } catch (e) {} }
