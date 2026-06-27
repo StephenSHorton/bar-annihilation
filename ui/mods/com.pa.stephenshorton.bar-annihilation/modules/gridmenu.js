@@ -40,7 +40,7 @@
       var CAPS = ['Q','W','E','R','A','S','D','F','Z','X','C','V'];
       var KEYCODE_TO_SLOT = { 81:0, 87:1, 69:2, 82:3, 65:4, 83:5, 68:6, 70:7, 90:8, 88:9, 67:10, 86:11 };
 
-      var el = null, pushTimer = null, lastPush = null;
+      var el = null, pushTimer = null, lastPush = null, lastOpen = null;
       var grid = { open: false, cells: null, title: '' };
       var diagged = {};   // spec -> logged its shape once
 
@@ -149,7 +149,12 @@
         try { g = computeCells(); } catch (e) { BA.warn('gridmenu compute failed: ' + (e && e.message)); }
         if (g) { grid.open = true; grid.cells = g.cells; grid.title = g.title; }
         else { grid.open = false; grid.cells = null; grid.title = ''; }
-        if (el) el.style.display = grid.open ? '' : 'none';
+        if (grid.open !== lastOpen) {
+          lastOpen = grid.open;
+          if (el) el.style.display = grid.open ? '' : 'none';
+          var p = api.panels[PANEL_ID];                  // force immediate visibility sync — a hidden
+          if (p && p.update) { try { p.update(); } catch (e2) {} }  // panel else polls visibility only every 1s
+        }
         pushGrid();
       }
 
@@ -211,7 +216,7 @@
       // --- boot --------------------------------------------------------------
       ensurePanel();
       if (pushTimer) clearInterval(pushTimer);
-      pushTimer = setInterval(tick, 300);
+      pushTimer = setInterval(tick, 150);
       tick();
       BA.log('gridmenu ready (M3 MVP, factory path) — select a factory; Q W E R / A S D F / Z X C V or click; Shift x5, Ctrl cancels (key) / x20 (click), right-click cancels');
     }

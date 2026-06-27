@@ -84,12 +84,17 @@
         var s = t.getAttribute('data-slot');
         if (s !== null) {
           e.preventDefault();
+          var msg = { slot: parseInt(s, 10), button: e.button || 0, shift: !!e.shiftKey, ctrl: !!e.ctrlKey, alt: !!e.altKey };
           try {
-            if (window.api && api.Panel && api.Panel.message) {
-              api.Panel.message(api.Panel.parentId, 'grid:click',
-                { slot: parseInt(s, 10), button: e.button || 0, shift: !!e.shiftKey, ctrl: !!e.ctrlKey, alt: !!e.altKey });
+            // panel.query (not .message): 'panel.query' is always whitelisted in the
+            // parent's panel.ready filter, so it reaches handlers['grid:click'] via onQuery.
+            if (window.api && api.Panel && api.Panel.query) {
+              api.Panel.query(api.Panel.parentId, 'grid:click', msg);
+              console.log('[bar-annihilation] gridmenu CHILD click slot=' + msg.slot + ' btn=' + msg.button + ' -> query sent');
+            } else {
+              console.log('[bar-annihilation] gridmenu CHILD click but api.Panel.query missing');
             }
-          } catch (err) {}
+          } catch (err) { console.log('[bar-annihilation] gridmenu CHILD click send error: ' + (err && err.message)); }
           return;
         }
         t = t.parentNode;
