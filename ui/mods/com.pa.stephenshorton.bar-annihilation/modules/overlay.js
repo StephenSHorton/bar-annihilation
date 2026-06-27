@@ -149,7 +149,13 @@
         b.id = BTN_ID;
         b.setAttribute('src', BTN_SRC);
         b.setAttribute('no-keyboard', '');
-        b.style.cssText = 'position:absolute;top:8px;right:10px;width:96px;height:30px;z-index:1490;';
+        // Default spot (the position the user chose by dragging: top edge, right side).
+        // Clamped so it stays on-screen at smaller resolutions; a saved drag position,
+        // if any, overrides this via BA.drag.makeDraggable() below.
+        var dL = 2985, dT = 0, W = 96, sw = window.innerWidth || 1920, sh = window.innerHeight || 1080;
+        if (dL > sw - W) dL = sw - W; if (dL < 0) dL = 0;
+        if (dT > sh - 30) dT = sh - 30; if (dT < 0) dT = 0;
+        b.style.cssText = 'position:absolute;left:' + dL + 'px;top:' + dT + 'px;width:' + W + 'px;height:30px;z-index:1490;';
         document.body.appendChild(b);
         try { api.Panel.bindElement(b); BA.log('overlay keys-button bound'); }
         catch (e) { BA.err('overlay keys-button bind failed', e); }
@@ -221,7 +227,6 @@
       ensurePanel();   // pre-create the overlay panel (hidden) so the first open is instant
       ensureButton();
       if (BA.drag) BA.drag.makeDraggable(BTN_ID, 'keysbtn');   // drag to reposition; remembers where you put it
-      setTimeout(function () { var e = document.getElementById(BTN_ID); if (e) { var r = e.getBoundingClientRect(); BA.log('keys button at left=' + Math.round(r.left) + ' top=' + Math.round(r.top)); } }, 800);
 
       BA.log('keyboard overlay ready (panel view) — backslash or the top-right "Keys" button to toggle; click outside / Esc to close');
     }
