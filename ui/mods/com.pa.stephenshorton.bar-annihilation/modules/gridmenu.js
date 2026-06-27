@@ -113,6 +113,19 @@
         return 4;
       }
       function isGenerator(entry) { return /(metal_extractor|energy_plant|metal_maker)/.test(String(buildIdOf(entry))); }
+      // quick-access generators: prefer the advanced variant — drop the basic when an
+      // advanced of the same family is also buildable (advanced fabbers show the adv one).
+      function quickGenerators(eco) {
+        var gens = [], hasAdv = {}, i, id;
+        for (i = 0; i < eco.length; i++) if (isGenerator(eco[i])) gens.push(eco[i]);
+        for (i = 0; i < gens.length; i++) { id = String(buildIdOf(gens[i])); if (/_adv/.test(id)) hasAdv[id.replace(/_adv/g, '')] = true; }
+        var out = [];
+        for (i = 0; i < gens.length; i++) {
+          id = String(buildIdOf(gens[i]));
+          if (/_adv/.test(id) || !hasAdv[id.replace(/_adv/g, '')]) out.push(gens[i]);
+        }
+        return out;
+      }
 
       // --- read the live selection into raw data (no view/nav) ----------------
       function rawCompute() {
@@ -191,11 +204,9 @@
             if (!cl.length) continue;
             cells[8 + cat] = { specId: null, isCategory: true, catLabel: CAT_LABELS[cat], catCount: cl.length, icon: CAT_ICONS[cat] };
           }
-          // top 8 = quick access: economy generators (metal, energy), then combat, then utility
-          var quick = [];
-          var eco = grid.cats[0] || [];
-          for (var g0 = 0; g0 < eco.length; g0++) if (isGenerator(eco[g0])) quick.push(eco[g0]);
-          quick = quick.concat(grid.cats[1] || [], grid.cats[2] || []);
+          // top 8 = quick access: economy generators (metal, energy; advanced preferred),
+          // then combat, then utility
+          var quick = quickGenerators(grid.cats[0] || []).concat(grid.cats[1] || [], grid.cats[2] || []);
           for (var q = 0; q < QUICK_SLOTS.length && q < quick.length; q++) put(QUICK_SLOTS[q], quick[q]);
           grid.sub = '';
 
