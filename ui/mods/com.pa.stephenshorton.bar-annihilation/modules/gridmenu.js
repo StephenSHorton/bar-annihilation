@@ -35,8 +35,9 @@
       var TIP_ID = 'barann-gridtip-panel';
       var TIP_SRC = 'coui://ui/mods/com.pa.stephenshorton.bar-annihilation/tooltip.html';
 
-      // layout geometry (px)
-      var GX = 12, GY = 300, GW = 336, GH = 252;          // grid panel
+      // layout geometry (px). Panel is bottom-anchored; the child box hugs content
+      // from the top, so home/factory/category grow downward without empty space.
+      var GX = 12, GY = 276, GW = 336, GH = 276;          // grid panel
       var TIPX = GX + GW + 8, TIPW = 300, TIPH = 260;     // tooltip panel (to the right)
 
       // grid keys in VISUAL reading order (top-left -> bottom-right); index = slot.
@@ -45,7 +46,16 @@
       // BAR numbers cells bottom-up; a category page / gap-filler fills ascending
       // index = bottom row first. In our top-down slots that is:
       var FILL_ORDER = [8, 9, 10, 11, 4, 5, 6, 7, 0, 1, 2, 3];
+      // home quick-access fills the top 8 cells, home row (A S D F) first then top (Q W E R)
+      var QUICK_SLOTS = [4, 5, 6, 7, 0, 1, 2, 3];
       var CAT_LABELS = ['ECONOMY', 'COMBAT', 'UTILITY', 'PRODUCTION'];
+      // generic PA category glyphs (GW tech icons) so the 4 category buttons don't reuse unit icons
+      var CAT_ICONS = [
+        'coui://ui/main/game/galactic_war/gw_play/img/tech/gwc_metal.png',
+        'coui://ui/main/game/galactic_war/gw_play/img/tech/gwc_turret.png',
+        'coui://ui/main/game/galactic_war/gw_play/img/tech/gwc_intelligence_fabrication.png',
+        'coui://ui/main/game/galactic_war/gw_play/img/tech/gwc_structure.png'
+      ];
       var KEY_B = 66, KEY_ESC = 27, KEY_SHIFT = 16, KEY_SPACE = 32;
 
       var el = null, tipEl = null, pushTimer = null, lastPush = null, lastOpen = null;
@@ -94,6 +104,15 @@
         if (g === 'factory') return 3;                  // Production
         return 2;                                       // Utility (radar/jammer/teleporter/orbital/fallback)
       }
+      function econRank(entry) {                         // economy order: metal first, then energy, then storage
+        var id = String(buildIdOf(entry));
+        if (/metal_extractor/.test(id)) return 0;
+        if (/energy_plant/.test(id)) return 1;
+        if (/metal_storage/.test(id)) return 2;
+        if (/energy_storage/.test(id)) return 3;
+        return 4;
+      }
+      function isGenerator(entry) { return /(metal_extractor|energy_plant|metal_maker)/.test(String(buildIdOf(entry))); }
 
       // --- read the live selection into raw data (no view/nav) ----------------
       function rawCompute() {
@@ -131,6 +150,7 @@
         var cats = [[], [], [], []];
         for (var c = 0; c < items.length; c++) cats[categoryOf(items[c])].push(items[c]);
         for (var cc = 0; cc < 4; cc++) cats[cc].sort(function (a, b) { return biOf(a) - biOf(b); });
+        cats[0].sort(function (a, b) { var r = econRank(a) - econRank(b); return r !== 0 ? r : biOf(a) - biOf(b); });
         return { isFactory: false, title: title, cats: cats, orders: orders, builderKey: key };
       }
 
@@ -165,19 +185,19 @@
 
         } else if (nav.category === null) {
           grid.mode = 'home';
-          var any = false;
+          // bottom row = the 4 category buttons (generic glyphs, not unit icons)
           for (var cat = 0; cat < 4; cat++) {
             var cl = grid.cats[cat] || [];
             if (!cl.length) continue;
-            any = true;
-            var colSlots = [8 + cat, 4 + cat, 0 + cat];   // bottom, mid, top
-            for (var n = 0; n < 3; n++) {
-              var ent = cl[n]; if (!ent) break;
-              if (n === 0) put(colSlots[0], ent, { isCategory: true, catLabel: CAT_LABELS[cat], catCount: cl.length });
-              else put(colSlots[n], ent, { preview: true });
-            }
+            cells[8 + cat] = { specId: null, isCategory: true, catLabel: CAT_LABELS[cat], catCount: cl.length, icon: CAT_ICONS[cat] };
           }
-          grid.sub = any ? 'Pick a category' : '';
+          // top 8 = quick access: economy generators (metal, energy), then combat, then utility
+          var quick = [];
+          var eco = grid.cats[0] || [];
+          for (var g0 = 0; g0 < eco.length; g0++) if (isGenerator(eco[g0])) quick.push(eco[g0]);
+          quick = quick.concat(grid.cats[1] || [], grid.cats[2] || []);
+          for (var q = 0; q < QUICK_SLOTS.length && q < quick.length; q++) put(QUICK_SLOTS[q], quick[q]);
+          grid.sub = '';
 
         } else {
           grid.mode = 'category';
@@ -331,7 +351,9 @@
         var slot = KEYCODE_TO_SLOT[w];
         // mobile + home: Z X C V open categories; the rest are inert
         if (!grid.isFactory && nav.category === null) {
-          if (slot >= 8 && !e.ctrlKey && !e.altKey) openCategory(slot - 8);
+          if (slot >= 8) { if (!e.ctrlKey && !e.altKey) openCategory(slot - 8); return false; }  // bottom row = categories
+          var qc = grid.cells && grid.cells[slot];                                                // top 8 = quick build
+          if (qc && qc.specId) enterFab(qc.specId, e.shiftKey, e.ctrlKey);
           return false;
         }
         var cell = grid.cells && grid.cells[slot];
@@ -355,7 +377,13 @@
       function onCellClick(payload) {
         if (!grid.open || !payload) return;
         var slot = payload.slot, rmb = (payload.button === 2);
-        if (grid.mode === 'home') { if (!rmb && slot != null && slot >= 0) openCategory(slot % 4); return; }
+        if (grid.mode === 'home') {
+          var hc = grid.cells && grid.cells[slot];
+          if (rmb || !hc) return;
+          if (hc.isCategory) openCategory(slot - 8);                                  // bottom row category button
+          else if (hc.specId) enterFab(hc.specId, !!payload.shift, !!payload.ctrl);   // top 8 quick build
+          return;
+        }
         var cell = grid.cells && grid.cells[slot];
         if (!cell) return;
         // factory: RMB negates (cancel/decrement). fabber: RMB is PA's placement-cancel — ignore it here.
@@ -399,8 +427,9 @@
       // same frame the native build bar would appear. Kills the select-commander flash.
       try { if (model.selection && model.selection.subscribe) model.selection.subscribe(tick); }
       catch (e) { BA.warn('gridmenu: selection subscribe failed: ' + (e && e.message)); }
-      BA.log('gridmenu ready (M3) — factory: flat grid + batching, Space=front, B=page; '
-        + 'fabber: Z/X/C/V categories (Economy/Combat/Utility/Production), B=page, Esc/RMB=back; hover for info');
+      BA.log('gridmenu ready (M3) — factory: flat grid + batching (Space=front, B=page); '
+        + 'fabber home: top 8 = quick build (economy/combat/utility), bottom 4 = Z/X/C/V categories; '
+        + 'in a category: B=page, Esc/Shift=back; hover for info');
     }
   });
 })();
