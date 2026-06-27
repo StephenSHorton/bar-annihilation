@@ -10,7 +10,7 @@ to run in any online match regardless of what other players use. Think of it as
 a PA port of BAR's LuaUI control widgets, rewritten in JavaScript against PA's
 Coherent UI layer.
 
-> Status: **early release (v0.0.1)** — a first cut of the control scheme is
+> Status: **early release (v0.0.2)** — a first cut of the control scheme is
 > playable; more BAR features are landing per the roadmap. The full feature spec
 > is researched and locked (see below).
 

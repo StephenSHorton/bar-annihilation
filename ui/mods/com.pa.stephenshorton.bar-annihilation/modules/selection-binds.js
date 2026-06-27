@@ -121,7 +121,82 @@
         api.select.idleFabbers(pid);
       }
 
+      // ---- M7 unit order-states: BAR move / fire / wait ------------------
+      // BAR grid sets an ABSOLUTE state by TAP COUNT (not a cycle): 1/2/3 taps.
+      // PA's order-states live in the action_bar PANEL — `set_order_state` ONLY
+      // works from that view; calling engine.call from live_game logs success
+      // but is a SILENT no-op. So drive them exactly as PA's own keybinds do
+      // (live_game.js:1477-1519): message the action_bar panel.
+      //   selection_order <Name> -> absolute set (model.selection<Name>())
+      //   toggle_order    <Name> -> cycle        (model.toggle<Name>OrderIndex())
+      // PA states (live_game_action_bar.js): move=Maneuver/Roam/HoldPosition,
+      // fire=FireAtWill/ReturnFire/HoldFire, energy=Consume/Conserve(hold).
+      var TAP_MS = 300;   // tap-chain window (~Spring KeyChainTimeout); tunable
+
+      function sendActionBar(msg, name, label) {
+        var sel = BA.util.readSelection();
+        if (!sel || !sel.units) { BA.log('BAR: ' + label + ' -- nothing selected'); return; }
+        try {
+          if (api && api.panels && api.panels.action_bar && api.panels.action_bar.message) {
+            api.panels.action_bar.message(msg, name);
+            BA.log('BAR: ' + label + ' -> ' + name + ' (' + sel.units + ' unit(s))');
+          } else { BA.warn('action_bar panel unavailable (' + label + ')'); }
+        } catch (e) { BA.err(msg + ' ' + name + ' failed', e); }
+      }
+
+      // Faithful multi-tap: count taps within TAP_MS, then apply the absolute
+      // selection_order for that count (clamped to the highest defined tap).
+      function multiTapOrder(byTap, baseLabel) {
+        var taps = 0, timer = null, maxTap = 0;
+        for (var k in byTap) { if (byTap.hasOwnProperty(k)) maxTap = Math.max(maxTap, +k); }
+        return function () {
+          taps++;
+          if (timer) clearTimeout(timer);
+          timer = setTimeout(function () {
+            var n = Math.min(taps, maxTap); taps = 0; timer = null;
+            sendActionBar('selection_order', byTap[n], baseLabel + ' ' + n + '-tap');
+          }, TAP_MS);
+        };
+      }
+
+      // ---- Command modes: BAR command keys -> PA command-mode arm ---------
+      // BAR command keys ARM a command cursor on the current selection; you then
+      // click a target (entity = the command, ground = the move/area variant) —
+      // exactly BAR's arm-then-click. model.setCommandIndex(N) is the live_game
+      // model's OWN command-mode entry (live_game.js:1457), callable from this
+      // scene; it SELF-GATES on model.allowedCommands (no-op if the selection
+      // can't do it, e.g. 'a' on a fabber). EXCEPT stop(-1), which issues
+      // immediately (no click). Indices double-verified vs self.commands[]
+      // (live_game.js:1361) AND PA's own command_mode_* keybinds (inputmap.js).
+      // Build-menu collision is handled by gridmenu's capture-phase consume:
+      // a build SUBMENU eats these keys first; HOME leaves the top row free;
+      // closed = commands fire.
+      function cmdMode(index, label) {
+        return function () {
+          try {
+            if (typeof model === 'undefined' || !model || !model.setCommandIndex) { BA.warn('setCommandIndex unavailable (' + label + ')'); return; }
+            model.setCommandIndex(index);
+            BA.log('BAR: ' + label + ' (cmd ' + index + ')');
+          } catch (e) { BA.err('command mode ' + label + ' failed', e); }
+        };
+      }
+
+      // BAR Ctrl+B = self-destruct. PA's native path (Delete) pops a confirm modal;
+      // BAR explodes on a countdown. Per user: explode the selection IMMEDIATELY, no
+      // confirm. api.unit.selfDestruct() -> engine.call('unit.selfDestruct') (global
+      // api, callable from live_game, acts on the current selection).
+      function selfDestruct() {
+        var sel = BA.util.readSelection();
+        if (!sel || !sel.units) { BA.log('BAR: self-destruct -- nothing selected'); return; }
+        try {
+          if (api && api.unit && api.unit.selfDestruct) { api.unit.selfDestruct(); BA.log('BAR: self-destruct (' + sel.units + ' unit(s))'); }
+          else BA.warn('api.unit.selfDestruct unavailable');
+        } catch (e) { BA.err('self-destruct failed', e); }
+      }
+
       // Mousetrap key string (BAR Grid default) -> { label, run }.
+      // ONLY bind what BAR's own configs bind. The engine (BA.select.run) supports the
+      // full BAR `select` DSL, but bound KEYS mirror BAR's defaults — no invented binds.
       var KEYMAP = {
         'tab':      { label: 'Select commander',    run: function () { selectThenFocusOnRepeat(function () { api.select.commander(); }, 'select commander'); } },
         'ctrl+tab': { label: 'Select idle builder', run: selectIdleBuilderCycle },
@@ -129,6 +204,27 @@
         'ctrl+e':   { label: 'Select all units',    run: selectAllUnits },
         'q':        { label: 'Select same type (on screen)', run: selectSameTypeOnScreen },
         'ctrl+w':   { label: 'Select same type (map-wide)',  run: selectSameTypeMapWide },
+        ';':        { label: 'Move state (tap 1/2/3 = roam/hold/maneuver)', run: multiTapOrder({ 1: 'Roam', 2: 'HoldPosition', 3: 'Maneuver' }, 'move state') },
+        'l':        { label: 'Fire state (tap 1/2/3 = free/hold/return)',   run: multiTapOrder({ 1: 'FireAtWill', 2: 'HoldFire', 3: 'ReturnFire' }, 'fire state') },
+        'y':        { label: 'Wait / energy hold (toggle)',                 run: function () { sendActionBar('toggle_order', 'Energy', 'wait/hold'); } },
+        // T = BAR "repeat". PA's only repeat is a factory's continuous build-stance
+        // (buildStanceOrders ['normal','continuous'], gated canBuild && !mobile), so this
+        // faithfully toggles factory repeat and no-ops on mobile units (PA has no mobile
+        // queue-repeat). Same action_bar path as the Y/energy toggle.
+        't':        { label: 'Repeat (factory build stance)',              run: function () { sendActionBar('toggle_order', 'BuildStance', 'repeat / build stance'); } },
+        // Command modes (BAR no-mod command row) — arm a PA command cursor, then click a target.
+        'a':        { label: 'Attack',              run: cmdMode(1, 'attack') },
+        'e':        { label: 'Reclaim',             run: cmdMode(4, 'reclaim') },
+        'r':        { label: 'Repair',              run: cmdMode(3, 'repair') },
+        'f':        { label: 'Fight (attack-move)', run: cmdMode(1, 'fight (attack-move)') },
+        'g':        { label: 'Stop',                run: cmdMode(-1, 'stop') },
+        'h':        { label: 'Patrol',              run: cmdMode(5, 'patrol') },
+        'j':        { label: 'Load',                run: cmdMode(10, 'load') },
+        'u':        { label: 'Unload',              run: cmdMode(9, 'unload') },
+        'o':        { label: 'Guard (assist)',      run: cmdMode(2, 'guard/assist') },
+        'd':        { label: 'D-Gun / manual fire', run: cmdMode(12, 'd-gun') },
+        'ctrl+g':   { label: 'Factory guard (assist)', run: cmdMode(2, 'factory guard') },
+        'ctrl+b':   { label: 'Self-destruct (instant)', run: selfDestruct },
         '\\':       { label: 'Toggle key overlay',  run: function () { if (BA.overlayToggle) BA.overlayToggle(); else BA.warn('overlay toggle not ready yet'); } },
         'ctrl+shift+r': { label: 'Reload UI scene (dev)', run: function () { try { BA.log('reloading live_game scene...'); api.game.debug.reloadScene(api.Panel.pageId); } catch (e) { BA.err('scene reload failed', e); } } }
       };
@@ -159,6 +255,35 @@
       catch (e) { BA.warn('could not hook active_dictionary: ' + (e && e.message)); }
       try { if (typeof input_maps_reload !== 'undefined' && input_maps_reload && input_maps_reload.progress) input_maps_reload.progress(function () { setTimeout(applyBinds, 0); }); }
       catch (e) {}
+
+      // ---- Native command/orders bar: show BAR keys, not PA's defaults -----
+      // PA's action_bar renders model.actionKeybinds() labels (live_game.js:2852+):
+      //   commands[] = [move, attack, altFire, assist, repair, reclaim, patrol,
+      //                 use, specialMove, unload, load, ping, stop]
+      //   orders[]   = [fire, move, energy, build]
+      // Our Mousetrap override changes the ACTUAL keys but NOT PA's labels, so the
+      // command/orders bar reads stale. Re-push a corrected payload (BAR keys for the
+      // indices we rebound) to the action_bar via PA's own channel (live_game.js:2896).
+      // Indices we didn't rebind keep PA's own labels. NOTE: these are DISPLAY-array
+      // indices (the keybindsForCommandModes list order), NOT setCommandIndex values.
+      var CMD_LABELS = { 1: 'A', 2: 'D', 3: 'O', 4: 'R', 5: 'E', 6: 'H', 9: 'U', 10: 'J', 12: 'G' };
+      var ORDER_LABELS = { 0: 'L', 1: ';', 2: 'Y', 3: 'T' };   // orders [fire,move,energy,build-stance]
+      function pushBarKeybinds() {
+        try {
+          if (!api.panels || !api.panels.action_bar || !api.panels.action_bar.message) return;
+          if (typeof model === 'undefined' || !model || !model.actionKeybinds) return;
+          var base = model.actionKeybinds() || {};
+          var commands = (base.commands || []).slice(), orders = (base.orders || []).slice();
+          for (var ci in CMD_LABELS) if (CMD_LABELS.hasOwnProperty(ci)) commands[ci] = CMD_LABELS[ci];
+          for (var oi in ORDER_LABELS) if (ORDER_LABELS.hasOwnProperty(oi)) orders[oi] = ORDER_LABELS[oi];
+          api.panels.action_bar.message('keybinds', { commands: commands, orders: orders });
+        } catch (e) { BA.err('pushBarKeybinds failed', e); }
+      }
+      pushBarKeybinds();
+      setTimeout(pushBarKeybinds, 600);    // after the action_bar has queried PA's defaults
+      setTimeout(pushBarKeybinds, 2000);
+      try { if (model && model.actionKeybinds && model.actionKeybinds.subscribe) model.actionKeybinds.subscribe(function () { setTimeout(pushBarKeybinds, 0); }); } catch (e) {}
+      try { if (model && model.selection && model.selection.subscribe) model.selection.subscribe(function () { setTimeout(pushBarKeybinds, 0); }); } catch (e) {}
     }
   });
 })();

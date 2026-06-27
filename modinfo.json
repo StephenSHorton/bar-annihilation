@@ -3,9 +3,9 @@
   "display_name": "BAR Annihilation",
   "description": "Beyond All Reason-style unit control for Planetary Annihilation: TITANS — command-queue editing, grid build menu, area commands, formations, and smart selection. Client-side and local-only; safe in any online game.",
   "author": "StephenSHorton",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "build": "124662",
-  "date": "2026-06-25",
+  "date": "2026-06-27",
   "context": "client",
   "category": ["ui", "settings"],
   "forum": "https://forums.planetaryannihilation.com/",
@@ -19,6 +19,9 @@
       "coui://ui/mods/com.pa.stephenshorton.bar-annihilation/modules/overlay.js",
       "coui://ui/mods/com.pa.stephenshorton.bar-annihilation/modules/gridmenu.js",
       "coui://ui/mods/com.pa.stephenshorton.bar-annihilation/modules/probe.js"
+    ],
+    "live_game_action_bar": [
+      "coui://ui/mods/com.pa.stephenshorton.bar-annihilation/modules/actionbar-tooltips.js"
     ]
   }
 }

@@ -55,7 +55,7 @@
         'coui://ui/main/game/galactic_war/gw_play/img/tech/gwc_metal.png',
         'coui://ui/main/game/galactic_war/gw_play/img/tech/gwc_turret.png',
         'coui://ui/main/game/galactic_war/gw_play/img/tech/gwc_intelligence_fabrication.png',
-        'coui://ui/main/game/galactic_war/gw_play/img/tech/gwc_structure.png'
+        'coui://ui/main/game/galactic_war/gw_play/img/tech/gwc_vehicle_factory.png'   // PRODUCTION = factory glyph (was gwc_structure)
       ];
       var KEY_B = 66, KEY_ESC = 27, KEY_SHIFT = 16, KEY_SPACE = 32;
 
