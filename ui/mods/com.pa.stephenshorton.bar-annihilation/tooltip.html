@@ -1,0 +1,59 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+  <meta locns="live_game" />
+  <noloc><title>BAR Annihilation: Unit Tooltip</title></noloc>
+  <link href="bundle://boot/boot.css" rel="stylesheet" type="text/css" />
+  <script src="bundle://boot/boot.js" type="text/javascript"></script>
+  <style>
+    html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; }
+    body.body_panel { background:transparent; font-family:Exo,"Segoe UI",sans-serif; color:#cfe3f2; }
+    #tip-root { position:absolute; left:0; bottom:0; right:0; }
+    .tip-wrap { padding:10px 12px; box-sizing:border-box; background:rgba(12,18,26,0.96);
+                border:1px solid #2b6c9c; border-radius:8px; box-shadow:0 8px 36px rgba(0,0,0,.55); }
+    .tip-name { font-size:15px; font-weight:700; color:#7fd1ff; margin-bottom:4px; }
+    .tip-desc { font-size:11px; line-height:1.35; color:#bcd2e4; margin-bottom:8px; }
+    .tip-stats { display:flex; flex-wrap:wrap; }
+    .tip-stat { width:50%; box-sizing:border-box; font-size:11px; margin-bottom:3px; }
+    .tip-stat .k { color:#8aa3b8; } .tip-stat .v { color:#e8f2ff; font-weight:600; margin-left:4px; }
+  </style>
+</head>
+<body class="body_panel">
+  <div id="tip-root"></div>
+  <script type="text/javascript">
+    // The host pushes { name, desc, stats:[{k,v}] } via panel.message('tip:show', ...).
+    var model = {};
+    var handlers = {};
+    var last = null;
+
+    function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+    function render(p) {
+      var root = document.getElementById('tip-root');
+      if (!root) return;
+      if (!p || !p.name) { root.innerHTML = ''; return; }
+      var stats = '';
+      var arr = p.stats || [];
+      for (var i = 0; i < arr.length; i++) {
+        stats += '<div class="tip-stat"><span class="k">' + esc(arr[i].k) + ':</span><span class="v">' + esc(arr[i].v) + '</span></div>';
+      }
+      root.innerHTML = '<div class="tip-wrap">'
+        + '<div class="tip-name">' + esc(p.name) + '</div>'
+        + (p.desc ? '<div class="tip-desc">' + esc(p.desc) + '</div>' : '')
+        + (stats ? '<div class="tip-stats">' + stats + '</div>' : '')
+        + '</div>';
+    }
+
+    $(document).ready(function () {
+      handlers['tip:show'] = function (payload) {
+        var s = JSON.stringify(payload);
+        if (s === last) return;
+        last = s;
+        render(payload);
+      };
+      app.registerWithCoherent(model, handlers);
+    });
+  </script>
+</body>
+</html>

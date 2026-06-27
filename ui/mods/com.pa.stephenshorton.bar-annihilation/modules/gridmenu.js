@@ -8,45 +8,43 @@
   //   row 3 (top)    Q W E R   = slots 0..3
   //   row 2 (mid)    A S D F   = slots 4..7
   //   row 1 (bottom) Z X C V   = slots 8..11
-  // MVP = the FRICTIONLESS half (design verdict): a FACTORY is selected
-  // (model.selectedMobile() === false) → grid shows the factory's buildables →
-  // key OR click enqueues via api.unit.build(spec, count) — no map coords.
-  // Mobile-builder categories + fabber placement come next; see docs/M3-GRID-BUILD.md.
+  // FACTORY is selected (model.selectedMobile() === false) → grid shows its
+  // buildables → key OR click enqueues via api.unit.build (no map coords).
   //
-  // Enumerate: model.unitSpecs[selSpec].build — each entry is a FULL buildable
-  //   spec object {id, name, cost(metal), buildIcon, structure, buildRow/Column...}
-  //   (confirmed via live DIAG). Plus model.selection() {spec_ids, build_orders,
-  //   selected_mobile}.
-  // Build:     api.unit.build / api.unit.cancelBuild  (factory branch — no clicks).
+  // Features: real build icons; key + click batching (BAR factory semantics);
+  // hover tooltip panel to the right (unit name/description/stats); and while
+  // our grid is open we suppress PA's native bottom-center build bar.
   //
-  // Batching (BAR factory semantics):
-  //   keyboard: key=+1, Shift=+5, Ctrl=-1, Shift+Ctrl=-5
-  //   mouse:    L=+1, Shift=+5, Ctrl=+20, Shift+Ctrl=+100; right-click negates
-  //
-  // Rendering: a Coherent child <panel> (gridmenu.html). The panel is sized to the
-  // grid box (not fullscreen) and is input-enabled so cells are clickable, while
-  // the rest of the screen stays interactive. The child paints icons and routes
-  // clicks back via api.Panel.message(parentId, 'grid:click', ...); ALL order
-  // logic stays here where model / api.unit live.
+  // Rendering: a Coherent child <panel> (gridmenu.html) sized to the grid box,
+  // input-enabled for clicks. Clicks/hovers route up via api.Panel.query
+  // ('grid:click' / 'grid:hover') because panel.query is always whitelisted in
+  // the parent's panel.ready filter (custom panel.message types are dropped).
+  // A second no-input <panel> (tooltip.html) shows unit info on hover.
   // ---------------------------------------------------------------------------
   BA.register({
     name: 'gridmenu',
     init: function () {
       var PANEL_ID = 'barann-gridmenu-panel';
       var SRC = 'coui://ui/mods/com.pa.stephenshorton.bar-annihilation/gridmenu.html';
+      var TIP_ID = 'barann-gridtip-panel';
+      var TIP_SRC = 'coui://ui/mods/com.pa.stephenshorton.bar-annihilation/tooltip.html';
+
+      // layout geometry (px)
+      var GX = 12, GY = 200, GW = 336, GH = 252;          // grid panel
+      var TIPX = GX + GW + 8, TIPW = 300, TIPH = 260;     // tooltip panel (to the right)
 
       // grid keys in VISUAL reading order (top-left -> bottom-right); index = slot.
-      // by virtual keyCode (US layout) for now (physical-scancode is a later refinement).
       var CAPS = ['Q','W','E','R','A','S','D','F','Z','X','C','V'];
       var KEYCODE_TO_SLOT = { 81:0, 87:1, 69:2, 82:3, 65:4, 83:5, 68:6, 70:7, 90:8, 88:9, 67:10, 86:11 };
 
-      var el = null, pushTimer = null, lastPush = null, lastOpen = null;
-      var grid = { open: false, cells: null, title: '' };
-      var diagged = {};   // spec -> logged its shape once
+      var el = null, tipEl = null, pushTimer = null, lastPush = null, lastOpen = null;
+      var grid = { open: false, cells: null, entries: null, title: '' };
+      var diagged = {};
 
       // --- helpers -----------------------------------------------------------
       function baseSpec(id) { var m = String(id).match(/^(.*\.json)/); return m ? m[1] : String(id); }
       function nameOf(id) { return baseSpec(id).split('/').pop().replace(/\.json.*$/, ''); }
+      function locStrip(s) { return (s == null) ? s : String(s).replace(/^!LOC:/, ''); }
       function entryField(entry, id, field) {
         if (entry && typeof entry === 'object' && entry[field] != null) return entry[field];
         var us = model.unitSpecs && (model.unitSpecs[id] || model.unitSpecs[baseSpec(id)]);
@@ -63,8 +61,7 @@
           var keys = us ? Object.keys(us) : null;
           var sample = (us && us.build && us.build.length) ? us.build[0] : null;
           BA.log('gridmenu DIAG spec=' + spec + ' keys=' + JSON.stringify(keys)
-            + ' build.len=' + ((us && us.build && us.build.length) || 0)
-            + ' build[0]=' + JSON.stringify(sample));
+            + ' build.len=' + ((us && us.build && us.build.length) || 0) + ' build[0]=' + JSON.stringify(sample));
         } catch (e) {}
       }
 
@@ -90,70 +87,101 @@
           for (var j = 0; j < bl.length; j++) {
             var id = buildIdOf(bl[j]);
             if (!id || seen[id]) continue;
-            seen[id] = 1; items.push(bl[j]);              // keep the full entry object
+            seen[id] = 1; items.push(bl[j]);
           }
         }
-        if (!items.length) return null;                   // selection can't build anything → not our menu
+        if (!items.length) return null;
 
         var orders = sel.build_orders || {};
-        var cells = [];
+        var cells = [], entries = [];
         for (var c = 0; c < 12; c++) {
           var entry = items[c];
-          if (!entry) { cells.push(null); continue; }
+          if (!entry) { cells.push(null); entries.push(null); continue; }
           var id2 = buildIdOf(entry), b = baseSpec(id2);
+          entries.push(entry);
           cells.push({
             specId: id2,
-            label: entryField(entry, id2, 'name') || nameOf(id2),
+            label: locStrip(entryField(entry, id2, 'name')) || nameOf(id2),
             icon: entryField(entry, id2, 'buildIcon') || null,
             metal: entryField(entry, id2, 'cost'),
             queue: orders[id2] || orders[b] || 0
           });
         }
         var facUs = model.unitSpecs[specs[0]] || model.unitSpecs[baseSpec(specs[0])];
-        var title = (facUs && facUs.name) || nameOf(specs[0]);
-        return { cells: cells, title: title, count: items.length };
+        var title = locStrip((facUs && facUs.name)) || nameOf(specs[0]);
+        return { cells: cells, entries: entries, title: title };
       }
 
-      // --- panel (sized to the grid box; input-enabled for clicks) ------------
-      function ensurePanel() {
-        if (el && document.getElementById(PANEL_ID)) return el;
-        var stale = document.getElementById(PANEL_ID);
+      // --- panels ------------------------------------------------------------
+      function makePanel(id, src, css, noInput) {
+        var stale = document.getElementById(id);
         if (stale) { try { $(stale).remove(); } catch (e) {} }
-        el = document.createElement('panel');            // MUST be <panel>, not <div>
-        el.id = PANEL_ID;
-        el.setAttribute('src', SRC);
-        el.setAttribute('no-keyboard', '');              // keys stay on host (our capture handler drives them)
-        // sized box at bottom-left so clicks hit cells but the rest of the screen
-        // stays interactive (NO no-input → cells are clickable; NO fit=dock).
-        el.style.cssText = 'position:absolute;left:12px;bottom:140px;width:336px;height:252px;z-index:1400;';
-        el.style.display = 'none';
-        document.body.appendChild(el);
-        try { api.Panel.bindElement(el); BA.log('gridmenu panel bound: ' + PANEL_ID); }
-        catch (e) { BA.err('gridmenu panel bind failed', e); }
-        return el;
+        var p = document.createElement('panel');
+        p.id = id;
+        p.setAttribute('src', src);
+        p.setAttribute('no-keyboard', '');
+        if (noInput) p.setAttribute('no-input', '');
+        p.style.cssText = css;
+        p.style.display = 'none';
+        document.body.appendChild(p);
+        try { api.Panel.bindElement(p); BA.log('gridmenu panel bound: ' + id); }
+        catch (e) { BA.err('gridmenu panel bind failed ' + id, e); }
+        return p;
+      }
+      function ensurePanels() {
+        if (!el || !document.getElementById(PANEL_ID))
+          el = makePanel(PANEL_ID, SRC, 'position:absolute;left:' + GX + 'px;bottom:' + GY + 'px;width:' + GW + 'px;height:' + GH + 'px;z-index:1400;', false);
+        if (!tipEl || !document.getElementById(TIP_ID))
+          tipEl = makePanel(TIP_ID, TIP_SRC, 'position:absolute;left:' + TIPX + 'px;bottom:' + GY + 'px;width:' + TIPW + 'px;height:' + TIPH + 'px;z-index:1400;', true);
+      }
+      function forceUpdate(id) { var p = api.panels[id]; if (p && p.update) { try { p.update(); } catch (e) {} } }
+      function showPanel(id, on) {
+        var node = document.getElementById(id);
+        if (node) node.style.display = on ? '' : 'none';
+        forceUpdate(id);   // a hidden panel only polls visibility every 1s; push it now
       }
 
       function pushGrid() {
         var p = api.panels[PANEL_ID];
-        if (!p || p.id === undefined || p.id < 0) return;  // wait for panel.create to resolve
+        if (!p || p.id === undefined || p.id < 0) return;
         var payload = { open: grid.open, cells: grid.cells, caps: CAPS, title: grid.title };
         var s = JSON.stringify(payload);
-        if (s === lastPush) return;                        // dedupe re-pushes (no flicker)
+        if (s === lastPush) return;
         lastPush = s;
         try { p.message('grid:update', payload); } catch (e) { BA.warn('gridmenu push failed: ' + (e && e.message)); }
       }
 
-      // --- per-tick: recompute from selection, open/close, push --------------
+      // --- suppress PA's native build bar while our grid is open -------------
+      function injectStyle() {
+        if (document.getElementById('barann-grid-style')) return;
+        try {
+          var st = document.createElement('style');
+          st.id = 'barann-grid-style'; st.type = 'text/css';
+          // CSS !important beats Knockout's inline display set by `visible: showBuildList`.
+          st.appendChild(document.createTextNode('body.barann-grid-open .div_build_bar_cont{display:none !important;}'));
+          (document.head || document.documentElement).appendChild(st);
+        } catch (e) { BA.warn('gridmenu style inject failed: ' + (e && e.message)); }
+      }
+      function setBodyFlag(on) {
+        try {
+          var b = document.body; if (!b) return;
+          var c = ' ' + b.className + ' ', has = c.indexOf(' barann-grid-open ') >= 0;
+          if (on && !has) b.className = (b.className + ' barann-grid-open').replace(/^\s+/, '');
+          else if (!on && has) b.className = c.replace(' barann-grid-open ', ' ').replace(/^\s+|\s+$/g, '');
+        } catch (e) {}
+      }
+
+      // --- per-tick: recompute, open/close, push -----------------------------
       function tick() {
         var g = null;
         try { g = computeCells(); } catch (e) { BA.warn('gridmenu compute failed: ' + (e && e.message)); }
-        if (g) { grid.open = true; grid.cells = g.cells; grid.title = g.title; }
-        else { grid.open = false; grid.cells = null; grid.title = ''; }
+        if (g) { grid.open = true; grid.cells = g.cells; grid.entries = g.entries; grid.title = g.title; }
+        else { grid.open = false; grid.cells = null; grid.entries = null; grid.title = ''; }
         if (grid.open !== lastOpen) {
           lastOpen = grid.open;
-          if (el) el.style.display = grid.open ? '' : 'none';
-          var p = api.panels[PANEL_ID];                  // force immediate visibility sync — a hidden
-          if (p && p.update) { try { p.update(); } catch (e2) {} }  // panel else polls visibility only every 1s
+          showPanel(PANEL_ID, grid.open);
+          setBodyFlag(grid.open);                          // hide/show PA's native build bar
+          if (!grid.open) showPanel(TIP_ID, false);        // drop the tooltip when the menu closes
         }
         pushGrid();
       }
@@ -162,63 +190,73 @@
       function doBuild(specId, qty) {
         if (!qty) return;
         try {
-          if (qty > 0) {
-            if (api.unit && api.unit.build) api.unit.build(specId, qty, false);
-            else BA.warn('gridmenu: api.unit.build missing');
-          } else {
-            if (api.unit && api.unit.cancelBuild) api.unit.cancelBuild(specId, -qty, false);
-            else BA.warn('gridmenu: api.unit.cancelBuild missing');
-          }
+          if (qty > 0) { if (api.unit && api.unit.build) api.unit.build(specId, qty, false); else BA.warn('gridmenu: api.unit.build missing'); }
+          else { if (api.unit && api.unit.cancelBuild) api.unit.cancelBuild(specId, -qty, false); else BA.warn('gridmenu: api.unit.cancelBuild missing'); }
           BA.log('gridmenu build ' + specId + ' x' + qty);
         } catch (e) { BA.err('gridmenu build failed ' + specId, e); }
-        lastPush = null;                                   // force next tick to refresh the queue badge
+        lastPush = null;
       }
-
       function qtyFromKeyboard(e) { return e.shiftKey ? (e.ctrlKey ? -5 : 5) : (e.ctrlKey ? -1 : 1); }
-      function qtyFromMouse(button, shift, ctrl) {          // BAR factory mouse batching
+      function qtyFromMouse(button, shift, ctrl) {
         var base = shift ? (ctrl ? 100 : 5) : (ctrl ? 20 : 1);
-        return (button === 2) ? -base : base;              // right-click negates
+        return (button === 2) ? -base : base;
       }
 
-      // --- keyboard (capture phase, before PA's Mousetrap) -------------------
-      // While the grid is OPEN the 12 grid keys are OURS (faithful: BAR rebinds
-      // Q/W/E/R... contextually for a selected builder). We FULLY consume them
-      // (keydown + keyup) so nothing bubbles to PA or our own select binds.
+      // --- keyboard (capture phase, consume both keydown + keyup while open) --
       function isGridKey(e) { return KEYCODE_TO_SLOT[e.which] !== undefined; }
       function onKeyDown(e) {
-        if (!grid.open || BA.util.uiBusy()) return;        // closed / chat open → pass through
-        if (!isGridKey(e)) return;                          // not a grid key → let camera etc. work
-        e.preventDefault(); e.stopImmediatePropagation();   // consume: block PA + our Mousetrap
+        if (!grid.open || BA.util.uiBusy()) return;
+        if (!isGridKey(e)) return;
+        e.preventDefault(); e.stopImmediatePropagation();
         var cell = grid.cells && grid.cells[KEYCODE_TO_SLOT[e.which]];
         if (cell) doBuild(cell.specId, qtyFromKeyboard(e));
         return false;
       }
       function onKeyUp(e) {
-        if (!grid.open) return;
-        if (!isGridKey(e)) return;
-        e.preventDefault(); e.stopImmediatePropagation();   // swallow the matching keyup too
-        return false;
+        if (!grid.open || !isGridKey(e)) return;
+        e.preventDefault(); e.stopImmediatePropagation(); return false;
       }
       document.addEventListener('keydown', onKeyDown, true);
       document.addEventListener('keyup', onKeyUp, true);
 
-      // --- mouse: clicks routed up from the child panel ----------------------
+      // --- mouse: click + hover routed up from the child panel ---------------
       function onCellClick(payload) {
         if (!grid.open || !payload) return;
         var cell = grid.cells && grid.cells[payload.slot];
-        if (!cell) return;
-        doBuild(cell.specId, qtyFromMouse(payload.button || 0, !!payload.shift, !!payload.ctrl));
+        if (cell) doBuild(cell.specId, qtyFromMouse(payload.button || 0, !!payload.shift, !!payload.ctrl));
+      }
+      function tipFor(entry) {
+        if (!entry) return null;
+        var stats = [];
+        function add(k, v) { if (v != null && v !== '' && !(typeof v === 'number' && isNaN(v))) stats.push({ k: k, v: (typeof v === 'number' ? Math.round(v) : v) }); }
+        add('Metal', entry.cost);
+        add('Health', entry.max_health);
+        if (entry.dps) add('DPS', entry.dps);
+        if (entry.max_range) add('Range', entry.max_range);
+        if (entry.navigation && entry.navigation.moveSpeed) add('Speed', entry.navigation.moveSpeed);
+        return { name: locStrip(entry.name) || '', desc: locStrip(entry.description) || '', stats: stats };
+      }
+      function onHover(payload) {
+        if (!grid.open || !payload) { showPanel(TIP_ID, false); return; }
+        var slot = payload.slot;
+        var entry = (slot != null && slot >= 0 && grid.entries) ? grid.entries[slot] : null;
+        var info = tipFor(entry);
+        if (!info) { showPanel(TIP_ID, false); return; }
+        var p = api.panels[TIP_ID];
+        if (p && p.id >= 0) { try { p.message('tip:show', info); } catch (e) {} }
+        showPanel(TIP_ID, true);
       }
       var H = (typeof handlers !== 'undefined' && handlers) ? handlers : (window.handlers || null);
-      if (H) H['grid:click'] = onCellClick;
-      else BA.warn('gridmenu: no handlers map — cell clicks will not route');
+      if (H) { H['grid:click'] = onCellClick; H['grid:hover'] = onHover; }
+      else BA.warn('gridmenu: no handlers map — clicks/hover will not route');
 
       // --- boot --------------------------------------------------------------
-      ensurePanel();
+      injectStyle();
+      ensurePanels();
       if (pushTimer) clearInterval(pushTimer);
       pushTimer = setInterval(tick, 150);
       tick();
-      BA.log('gridmenu ready (M3 MVP, factory path) — select a factory; Q W E R / A S D F / Z X C V or click; Shift x5, Ctrl cancels (key) / x20 (click), right-click cancels');
+      BA.log('gridmenu ready (M3 MVP, factory path) — select a factory; key or click to build; hover for info; native build bar hidden while open');
     }
   });
 })();

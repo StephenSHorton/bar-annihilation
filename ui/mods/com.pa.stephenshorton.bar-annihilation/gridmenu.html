@@ -78,6 +78,16 @@
         + '<div class="gm-hint">L +1 &middot; Shift &times;5 &middot; Ctrl &times;20 &middot; RMB cancel</div></div>';
     }
 
+    var lastHover = -2;
+    function sendHover(slot) {
+      try { if (window.api && api.Panel && api.Panel.query) api.Panel.query(api.Panel.parentId, 'grid:hover', { slot: slot }); } catch (e) {}
+    }
+    function onHoverMove(e) {
+      var slot = -1, t = e.target;
+      while (t && t.getAttribute) { var s = t.getAttribute('data-slot'); if (s !== null) { slot = parseInt(s, 10); break; } t = t.parentNode; }
+      if (slot !== lastHover) { lastHover = slot; sendHover(slot); }
+    }
+
     function routeClick(e) {
       var t = e.target;
       while (t && t.getAttribute) {
@@ -110,6 +120,8 @@
       };
       document.addEventListener('mousedown', routeClick, false);     // catches L (0) and R (2)
       document.addEventListener('contextmenu', function (e) { e.preventDefault(); }, false);
+      document.addEventListener('mouseover', onHoverMove, false);     // hover -> tooltip
+      document.addEventListener('mouseout', function (e) { if (!e.relatedTarget && lastHover !== -1) { lastHover = -1; sendHover(-1); } }, false);
       app.registerWithCoherent(model, handlers);
     });
   </script>
