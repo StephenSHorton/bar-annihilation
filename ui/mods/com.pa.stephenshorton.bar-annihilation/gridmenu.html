@@ -72,10 +72,13 @@
         for (var c = 0; c < 4; c++) { var i = r * 4 + c; rows += cellHtml(p.cells[i], caps[i], i); }
         rows += '</div>';
       }
+      var hint = (p.mode === 'fabber')
+        ? 'Select &rarr; click map to place &middot; drag for walls &middot; Shift queue'
+        : 'L +1 &middot; Shift &times;5 &middot; Ctrl &times;20 &middot; RMB cancel &middot; Space front';
       root.innerHTML = '<div class="gm-wrap">'
         + '<div class="gm-title">' + esc(p.title || 'Build') + '</div>'
         + rows
-        + '<div class="gm-hint">L +1 &middot; Shift &times;5 &middot; Ctrl &times;20 &middot; RMB cancel &middot; Space front</div></div>';
+        + '<div class="gm-hint">' + hint + '</div></div>';
     }
 
     var lastHover = -2;

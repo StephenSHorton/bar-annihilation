@@ -38,7 +38,7 @@
       var KEYCODE_TO_SLOT = { 81:0, 87:1, 69:2, 82:3, 65:4, 83:5, 68:6, 70:7, 90:8, 88:9, 67:10, 86:11 };
 
       var el = null, tipEl = null, pushTimer = null, lastPush = null, lastOpen = null;
-      var grid = { open: false, cells: null, entries: null, title: '' };
+      var grid = { open: false, cells: null, entries: null, title: '', isFactory: true };
       var spaceHeld = false;   // hold Space = insert the build at the FRONT of the factory queue
       var diagged = {};
 
@@ -73,7 +73,6 @@
         if (!sel || !sel.spec_ids) return null;
         var mobile;
         try { mobile = model.selectedMobile ? model.selectedMobile() : sel.selected_mobile; } catch (e) { mobile = sel.selected_mobile; }
-        if (mobile) return null;                          // MVP: factories only (fabbers need placement)
 
         var specs = [];
         for (var k in sel.spec_ids) { if (sel.spec_ids.hasOwnProperty(k)) specs.push(k); }
@@ -110,7 +109,7 @@
         }
         var facUs = model.unitSpecs[specs[0]] || model.unitSpecs[baseSpec(specs[0])];
         var title = locStrip((facUs && facUs.name)) || nameOf(specs[0]);
-        return { cells: cells, entries: entries, title: title };
+        return { cells: cells, entries: entries, title: title, isFactory: !mobile };
       }
 
       // --- panels ------------------------------------------------------------
@@ -145,7 +144,7 @@
       function pushGrid() {
         var p = api.panels[PANEL_ID];
         if (!p || p.id === undefined || p.id < 0) return;
-        var payload = { open: grid.open, cells: grid.cells, caps: CAPS, title: grid.title };
+        var payload = { open: grid.open, cells: grid.cells, caps: CAPS, title: grid.title, mode: grid.isFactory ? 'factory' : 'fabber' };
         var s = JSON.stringify(payload);
         if (s === lastPush) return;
         lastPush = s;
@@ -176,7 +175,7 @@
       function tick() {
         var g = null;
         try { g = computeCells(); } catch (e) { BA.warn('gridmenu compute failed: ' + (e && e.message)); }
-        if (g) { grid.open = true; grid.cells = g.cells; grid.entries = g.entries; grid.title = g.title; }
+        if (g) { grid.open = true; grid.cells = g.cells; grid.entries = g.entries; grid.title = g.title; grid.isFactory = g.isFactory; }
         else { grid.open = false; grid.cells = null; grid.entries = null; grid.title = ''; }
         if (grid.open !== lastOpen) {
           lastOpen = grid.open;
@@ -204,6 +203,20 @@
         return (button === 2) ? -base : base;
       }
 
+      // fabber / mobile builder: trigger PA's OWN placement mode (ghost preview,
+      // click-to-place, wall-drag, metal-spot snapping) by calling the same handler
+      // the native build bar uses (live_game.js executeStartBuild -> beginFabMode).
+      function enterFab(specId, shift, ctrl, cancel) {
+        try {
+          if (model.executeStartBuild) {
+            model.executeStartBuild({ item: specId, batch: !!shift, cancel: !!cancel, urgent: !!ctrl, more: false });
+          } else if (api.arch && api.arch.beginFabMode) {
+            api.arch.beginFabMode(specId); if (model.mode) model.mode('fab');
+          } else { BA.warn('gridmenu: no fab-mode entry'); return; }
+          BA.log('gridmenu fab ' + specId + (cancel ? ' (cancel)' : ''));
+        } catch (e) { BA.err('gridmenu fab failed ' + specId, e); }
+      }
+
       // --- keyboard (capture phase, consume both keydown + keyup while open) --
       function isGridKey(e) { return KEYCODE_TO_SLOT[e.which] !== undefined; }
       function onKeyDown(e) {
@@ -212,7 +225,7 @@
         if (!isGridKey(e)) return;
         e.preventDefault(); e.stopImmediatePropagation();
         var cell = grid.cells && grid.cells[KEYCODE_TO_SLOT[e.which]];
-        if (cell) doBuild(cell.specId, qtyFromKeyboard(e), spaceHeld);
+        if (cell) { if (grid.isFactory) doBuild(cell.specId, qtyFromKeyboard(e), spaceHeld); else enterFab(cell.specId, e.shiftKey, e.ctrlKey, false); }
         return false;
       }
       function onKeyUp(e) {
@@ -228,7 +241,10 @@
       function onCellClick(payload) {
         if (!grid.open || !payload) return;
         var cell = grid.cells && grid.cells[payload.slot];
-        if (cell) doBuild(cell.specId, qtyFromMouse(payload.button || 0, !!payload.shift, !!payload.ctrl), spaceHeld);
+        if (cell) {
+          if (grid.isFactory) doBuild(cell.specId, qtyFromMouse(payload.button || 0, !!payload.shift, !!payload.ctrl), spaceHeld);
+          else enterFab(cell.specId, !!payload.shift, !!payload.ctrl, (payload.button === 2));
+        }
       }
       function tipFor(entry) {
         if (!entry) return null;
@@ -261,7 +277,7 @@
       if (pushTimer) clearInterval(pushTimer);
       pushTimer = setInterval(tick, 150);
       tick();
-      BA.log('gridmenu ready (M3 MVP, factory path) — factory: key/click to build, Shift x5, Ctrl cancel(key)/x20(click), RMB cancel, hold Space = front of queue; hover for info');
+      BA.log('gridmenu ready (M3) — factory: key/click build (Shift x5, Ctrl cancel(key)/x20(click), RMB cancel, Space=front); fabber: key/click enters placement, then click map to place; hover for info');
     }
   });
 })();
