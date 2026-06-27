@@ -135,6 +135,7 @@
         el.setAttribute('fit', 'dock');
         el.setAttribute('no-keyboard', '');                  // keep keyboard on host (our capture handler drives it)
         el.style.cssText = 'position:absolute;left:0;top:0;width:100%;height:100%;z-index:1500;';
+        el.style.display = 'none';                 // created hidden; show() reveals + forces an update
         document.body.appendChild(el);
         try { api.Panel.bindElement(el); BA.log('overlay panel bound: ' + PANEL_ID); }
         catch (e) { BA.err('overlay panel bind failed', e); }
@@ -148,11 +149,13 @@
         b.id = BTN_ID;
         b.setAttribute('src', BTN_SRC);
         b.setAttribute('no-keyboard', '');
-        b.style.cssText = 'position:absolute;top:8px;right:10px;width:96px;height:30px;z-index:1450;';
+        b.style.cssText = 'position:absolute;top:8px;right:10px;width:96px;height:30px;z-index:1490;';
         document.body.appendChild(b);
         try { api.Panel.bindElement(b); BA.log('overlay keys-button bound'); }
         catch (e) { BA.err('overlay keys-button bind failed', e); }
       }
+
+      function forceUpdate() { var p = api.panels[PANEL_ID]; if (p && p.update) { try { p.update(); } catch (e) {} } }
 
       function pushState() {
         var p = api.panels[PANEL_ID];
@@ -165,6 +168,7 @@
         ensurePanel();
         idx = null; layersCache = null;                       // recompute (binds may have changed)
         if (el) el.style.display = '';
+        forceUpdate();            // beat the ~1s hidden-panel visibility poll -> show immediately
         visible = true;
         pushState();
         if (pushTimer) clearInterval(pushTimer);
@@ -214,6 +218,7 @@
 
       var H = (typeof handlers !== 'undefined' && handlers) ? handlers : (window.handlers || null);
       if (H) { H['overlay:close'] = hide; H['overlay:toggle'] = toggle; }   // child clicks: backdrop->close, button->toggle
+      ensurePanel();   // pre-create the overlay panel (hidden) so the first open is instant
       ensureButton();
 
       BA.log('keyboard overlay ready (panel view) — backslash or the top-right "Keys" button to toggle; click outside / Esc to close');
