@@ -16,22 +16,35 @@
   </style>
 </head>
 <body class="body_panel">
-  <!-- A persistent top-right button (its own panel; the host live_game DOM never paints).
-       Click toggles the keyboard overlay via the parent (overlay.js handlers['overlay:toggle']). -->
+  <!-- A persistent button (its own panel; the host live_game DOM never paints).
+       A plain CLICK toggles the keyboard overlay; a press-and-DRAG (>3px) hands
+       off to core.js's drag manager, which moves this panel and remembers where
+       you put it. -->
   <div class="kbtn-b" data-action="toggle">Keys</div>
   <script type="text/javascript">
     var model = {}, handlers = {};
+    var PANEL = 'barann-keysbtn-panel';
+    var THRESH = 3;            // px of movement before a press becomes a drag
+    var press = null;          // { sx, sy, gx, gy, dragging } while the mouse is down
+    function q(type, payload) { try { if (window.api && api.Panel && api.Panel.query) api.Panel.query(api.Panel.parentId, type, payload || {}); } catch (e) {} }
     $(document).ready(function () {
       document.addEventListener('mousedown', function (e) {
-        var t = e.target;
-        while (t && t.getAttribute) {
-          if (t.getAttribute('data-action') === 'toggle') {
-            e.preventDefault();
-            try { if (window.api && api.Panel && api.Panel.query) api.Panel.query(api.Panel.parentId, 'overlay:toggle', {}); } catch (err) {}
-            return;
-          }
-          t = t.parentNode;
+        press = { sx: e.clientX, sy: e.clientY, gx: e.offsetX, gy: e.offsetY, dragging: false };
+        e.preventDefault();
+      }, false);
+      document.addEventListener('mousemove', function (e) {
+        if (!press || press.dragging) return;
+        if (Math.abs(e.clientX - press.sx) > THRESH || Math.abs(e.clientY - press.sy) > THRESH) {
+          press.dragging = true;
+          q('drag:start', { panel: PANEL, gx: press.gx, gy: press.gy });   // hand off to the fullscreen drag layer
         }
+      }, false);
+      document.addEventListener('mouseup', function (e) {
+        if (press) {
+          if (press.dragging) q('drag:end', {});      // backup end in case the layer missed the mouseup
+          else q('overlay:toggle', {});               // a click (no drag) toggles the overlay
+        }
+        press = null;
       }, false);
       app.registerWithCoherent(model, handlers);
     });
