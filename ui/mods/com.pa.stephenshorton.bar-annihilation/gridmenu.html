@@ -9,34 +9,40 @@
   <style>
     html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; }
     body.body_panel { background:transparent; font-family:Exo,"Segoe UI",sans-serif; color:#cfe3f2; }
-    #gm-root { position:absolute; left:16px; bottom:150px; }
-    .gm-wrap { display:none; padding:10px 12px; background:rgba(12,18,26,0.92);
-               border:1px solid #2b6c9c; border-radius:8px; box-shadow:0 8px 36px rgba(0,0,0,.55); }
-    .gm-wrap.open { display:block; }
-    .gm-title { font-size:12px; color:#7fd1ff; letter-spacing:.03em; margin-bottom:8px; text-transform:uppercase; }
-    .gm-row { display:flex; margin-bottom:6px; }
-    .gm-row:last-child { margin-bottom:0; }
-    .gm-cell { position:relative; width:74px; height:60px; margin-right:6px; box-sizing:border-box;
-               border:1px solid #33485c; border-radius:6px; background:#162230;
-               display:flex; flex-direction:column; padding:4px 6px; overflow:hidden; }
+    #gm-root { position:absolute; left:0; top:0; right:0; bottom:0; }
+    .gm-wrap { position:absolute; left:0; top:0; right:0; bottom:0; padding:8px 10px; box-sizing:border-box;
+               background:rgba(12,18,26,0.92); border:1px solid #2b6c9c; border-radius:8px;
+               box-shadow:0 8px 36px rgba(0,0,0,.55); }
+    .gm-title { font-size:12px; color:#7fd1ff; letter-spacing:.03em; margin-bottom:6px; text-transform:uppercase;
+                white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .gm-row { display:flex; margin-bottom:5px; }
+    .gm-row:last-of-type { margin-bottom:0; }
+    .gm-cell { position:relative; width:74px; height:60px; margin-right:5px; box-sizing:border-box;
+               border:1px solid #33485c; border-radius:6px; background:#111a24; overflow:hidden; }
     .gm-row .gm-cell:last-child { margin-right:0; }
-    .gm-cell.empty { background:rgba(20,28,38,0.5); border-style:dashed; border-color:#2a3a4a; }
-    .gm-cell.filled { background:#1c3145; border-color:#3f7fb0; }
-    .gm-cap { position:absolute; top:3px; right:5px; font-size:10px; font-weight:700; color:#7f93a6; }
-    .gm-name { font-size:10px; line-height:1.05; color:#d4e6f5; word-break:break-word;
-               display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; }
-    .gm-cost { margin-top:auto; font-size:9px; color:#9fb3c6; }
-    .gm-cost .m { color:#e0c060; } .gm-cost .e { color:#79c0ff; margin-left:6px; }
-    .gm-q { position:absolute; bottom:3px; right:5px; font-size:11px; font-weight:700; color:#bfffce; }
-    .gm-hint { margin-top:8px; font-size:9px; color:#7f93a6; }
+    .gm-cell.empty { background:rgba(20,28,38,0.4); border-style:dashed; border-color:#26333f; }
+    .gm-cell.filled { cursor:pointer; }
+    .gm-cell.filled:hover { border-color:#5fa8e0; box-shadow:inset 0 0 0 1px #5fa8e0; }
+    .gm-img { position:absolute; left:0; top:0; width:100%; height:100%; object-fit:contain; }
+    .gm-name { position:absolute; left:0; right:0; bottom:0; padding:2px 3px; font-size:9px; line-height:1.05;
+               color:#d4e6f5; text-align:center; background:rgba(8,12,18,0.55);
+               white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }   /* fallback when no icon */
+    .gm-cap { position:absolute; top:2px; right:4px; font-size:10px; font-weight:700; color:#e8f2ff;
+              text-shadow:0 0 3px #000, 0 0 3px #000; }
+    .gm-cost { position:absolute; left:4px; bottom:2px; font-size:10px; font-weight:600; color:#f0d472;
+               text-shadow:0 0 3px #000, 0 0 3px #000; }
+    .gm-q { position:absolute; right:4px; bottom:2px; font-size:12px; font-weight:700; color:#bfffce;
+            text-shadow:0 0 3px #000, 0 0 3px #000; }
+    .gm-hint { margin-top:6px; font-size:9px; color:#7f93a6; }
   </style>
 </head>
 <body class="body_panel">
   <div id="gm-root"></div>
   <script type="text/javascript">
     // The live_game host pushes { open, cells:[12], caps:[12], title } via
-    // panel.message('grid:update', ...). cells[i] = null | {specId,label,metal,energy,queue}.
+    // panel.message('grid:update', ...). cells[i] = null | {specId,label,icon,metal,queue}.
     // Cell order is visual reading order: row0 = Q W E R, row1 = A S D F, row2 = Z X C V.
+    // Clicks on a cell are routed back to the host via api.Panel.message(parentId, 'grid:click', ...).
     var model = {};
     var handlers = {};
     var last = null;
@@ -44,34 +50,50 @@
     function num(n) { return (n == null) ? '' : (n >= 1000 ? Math.round(n / 100) / 10 + 'k' : '' + Math.round(n)); }
     function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 
-    function cellHtml(cell, cap) {
+    function cellHtml(cell, cap, slot) {
       if (!cell) return '<div class="gm-cell empty"><div class="gm-cap">' + esc(cap) + '</div></div>';
-      var cost = '';
-      if (cell.metal != null || cell.energy != null) {
-        cost = '<div class="gm-cost">'
-          + (cell.metal != null ? '<span class="m">' + num(cell.metal) + '</span>' : '')
-          + (cell.energy != null ? '<span class="e">' + num(cell.energy) + '</span>' : '') + '</div>';
-      }
-      var q = (cell.queue > 0) ? '<div class="gm-q">' + cell.queue + '</div>' : '';
-      return '<div class="gm-cell filled"><div class="gm-cap">' + esc(cap) + '</div>'
-        + '<div class="gm-name">' + esc(cell.label) + '</div>' + cost + q + '</div>';
+      var inner = '';
+      if (cell.icon) inner += '<img class="gm-img" src="' + esc(cell.icon) + '" />';
+      else inner += '<div class="gm-name">' + esc(cell.label) + '</div>';
+      inner += '<div class="gm-cap">' + esc(cap) + '</div>';
+      if (cell.metal != null) inner += '<div class="gm-cost">' + num(cell.metal) + '</div>';
+      if (cell.queue > 0) inner += '<div class="gm-q">' + cell.queue + '</div>';
+      return '<div class="gm-cell filled" data-slot="' + slot + '" title="' + esc(cell.label) + '">' + inner + '</div>';
     }
 
     function render(p) {
       var root = document.getElementById('gm-root');
       if (!root) return;
-      if (!p || !p.open || !p.cells) { root.innerHTML = '<div class="gm-wrap"></div>'; return; }
+      if (!p || !p.open || !p.cells) { root.innerHTML = ''; return; }
       var caps = p.caps || ['Q','W','E','R','A','S','D','F','Z','X','C','V'];
       var rows = '';
       for (var r = 0; r < 3; r++) {
         rows += '<div class="gm-row">';
-        for (var c = 0; c < 4; c++) { var i = r * 4 + c; rows += cellHtml(p.cells[i], caps[i]); }
+        for (var c = 0; c < 4; c++) { var i = r * 4 + c; rows += cellHtml(p.cells[i], caps[i], i); }
         rows += '</div>';
       }
-      root.innerHTML = '<div class="gm-wrap open">'
+      root.innerHTML = '<div class="gm-wrap">'
         + '<div class="gm-title">' + esc(p.title || 'Build') + '</div>'
         + rows
-        + '<div class="gm-hint">Shift &times;5 &middot; Ctrl cancel</div></div>';
+        + '<div class="gm-hint">L +1 &middot; Shift &times;5 &middot; Ctrl &times;20 &middot; RMB cancel</div></div>';
+    }
+
+    function routeClick(e) {
+      var t = e.target;
+      while (t && t.getAttribute) {
+        var s = t.getAttribute('data-slot');
+        if (s !== null) {
+          e.preventDefault();
+          try {
+            if (window.api && api.Panel && api.Panel.message) {
+              api.Panel.message(api.Panel.parentId, 'grid:click',
+                { slot: parseInt(s, 10), button: e.button || 0, shift: !!e.shiftKey, ctrl: !!e.ctrlKey, alt: !!e.altKey });
+            }
+          } catch (err) {}
+          return;
+        }
+        t = t.parentNode;
+      }
     }
 
     $(document).ready(function () {
@@ -81,6 +103,8 @@
         last = s;
         render(payload);
       };
+      document.addEventListener('mousedown', routeClick, false);     // catches L (0) and R (2)
+      document.addEventListener('contextmenu', function (e) { e.preventDefault(); }, false);
       app.registerWithCoherent(model, handlers);
     });
   </script>
