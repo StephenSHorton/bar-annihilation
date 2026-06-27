@@ -17,7 +17,8 @@
       "coui://ui/mods/com.pa.stephenshorton.bar-annihilation/modules/select-engine.js",
       "coui://ui/mods/com.pa.stephenshorton.bar-annihilation/modules/selection-binds.js",
       "coui://ui/mods/com.pa.stephenshorton.bar-annihilation/modules/overlay.js",
-      "coui://ui/mods/com.pa.stephenshorton.bar-annihilation/modules/gridmenu.js"
+      "coui://ui/mods/com.pa.stephenshorton.bar-annihilation/modules/gridmenu.js",
+      "coui://ui/mods/com.pa.stephenshorton.bar-annihilation/modules/probe.js"
     ]
   }
 }

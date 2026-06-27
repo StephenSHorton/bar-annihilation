@@ -12,10 +12,14 @@
     init: function () {
       if (typeof Mousetrap === 'undefined' || !Mousetrap.bind) { BA.warn('Mousetrap unavailable — BAR key binds disabled'); return; }
 
+      // BAR Ctrl+Q (grid) = `PrevSelection++_ClearSelection_SelectPart_50+` — keep half
+      // the current selection, REPLACE. Route through the engine's faithful SelectPart
+      // (floor(n*50/100) + the shared circular cursor, so repeated presses cycle/halve).
       function split50() {
         var s = BA.util.readSelection();
         if (!s || s.units < 2) { BA.log('BAR split: need >=2 selected (have ' + (s ? s.units : 0) + ')'); return; }
-        var half = s.ids.slice(0, Math.ceil(s.ids.length / 2));
+        if (BA.select && BA.select.run) { BA.select.run({ source: 'prevselection', conclusion: 'selectpart', conclusionArg: 50, append: false }); return; }
+        var half = s.ids.slice(0, Math.floor(s.ids.length / 2));   // fallback if engine not ready
         api.select.unitsById(half);
         BA.log('BAR split 50%: kept ' + half.length + ' of ' + s.units);
       }
