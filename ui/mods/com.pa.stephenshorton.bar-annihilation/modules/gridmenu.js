@@ -354,13 +354,13 @@
       // --- mouse: click + hover routed up from the child panel ---------------
       function onCellClick(payload) {
         if (!grid.open || !payload) return;
-        var slot = payload.slot;
-        if (grid.mode === 'home') { if (slot != null && slot >= 0) openCategory(slot % 4); return; }
+        var slot = payload.slot, rmb = (payload.button === 2);
+        if (grid.mode === 'home') { if (!rmb && slot != null && slot >= 0) openCategory(slot % 4); return; }
         var cell = grid.cells && grid.cells[slot];
         if (!cell) return;
-        if (grid.mode === 'category' && payload.button === 2) { goHome(); return; }   // RMB = back
+        // factory: RMB negates (cancel/decrement). fabber: RMB is PA's placement-cancel — ignore it here.
         if (grid.isFactory) doBuild(cell.specId, qtyFromMouse(payload.button || 0, !!payload.shift, !!payload.ctrl), spaceHeld);
-        else { enterFab(cell.specId, !!payload.shift, !!payload.ctrl); if (!payload.shift) goHome(); }
+        else if (!rmb) { enterFab(cell.specId, !!payload.shift, !!payload.ctrl); if (!payload.shift) goHome(); }
       }
       function tipFor(entry) {
         if (!entry) return null;

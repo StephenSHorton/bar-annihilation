@@ -92,7 +92,7 @@
       }
       var hint;
       if (p.mode === 'home') hint = 'Z X C V: open category';
-      else if (p.mode === 'category') hint = 'Key/click to place &middot; B: page &middot; Esc/RMB/Shift: back';
+      else if (p.mode === 'category') hint = 'Key/click to place &middot; B: page &middot; Esc/Shift: back';
       else hint = 'L +1 &middot; Shift &times;5 &middot; Ctrl &times;20 &middot; RMB cancel &middot; Space front' + (p.sub ? ' &middot; B: page' : '');
       var title = esc(p.title || 'Build') + (p.sub ? '<span class="gm-sub">' + esc(p.sub) + '</span>' : '');
       root.innerHTML = '<div class="gm-wrap">'
