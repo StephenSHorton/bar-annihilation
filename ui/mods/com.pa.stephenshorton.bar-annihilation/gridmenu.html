@@ -95,8 +95,8 @@
         rows += '</div>';
       }
       var title = esc(p.title || 'Build') + (p.sub ? '<span class="gm-sub">' + esc(p.sub) + '</span>' : '');
-      var back = (p.mode === 'category') ? '<div class="gm-btn" data-action="back">&#8592; Shift</div>' : '';
-      var page = (p.pages > 1) ? '<div class="gm-btn gm-page" data-action="page">Page ' + p.page + '/' + p.pages + ' &#8594;</div>' : '';
+      var back = (p.mode === 'category') ? '<div class="gm-btn" data-action="back">&#8592; Back | Shift</div>' : '';
+      var page = (p.pages > 1) ? '<div class="gm-btn gm-page" data-action="page">B | Page ' + p.page + '/' + p.pages + ' &#8594;</div>' : '';
       var foot = (back || page) ? ('<div class="gm-foot">' + back + page + '</div>') : '';
       root.innerHTML = '<div class="gm-wrap">'
         + '<div class="gm-title">' + title + '</div>'
