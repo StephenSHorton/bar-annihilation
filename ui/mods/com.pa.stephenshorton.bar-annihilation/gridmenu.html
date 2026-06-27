@@ -75,12 +75,11 @@
       root.innerHTML = '<div class="gm-wrap">'
         + '<div class="gm-title">' + esc(p.title || 'Build') + '</div>'
         + rows
-        + '<div class="gm-hint">L +1 &middot; Shift &times;5 &middot; Ctrl &times;20 &middot; RMB cancel</div></div>';
+        + '<div class="gm-hint">L +1 &middot; Shift &times;5 &middot; Ctrl &times;20 &middot; RMB cancel &middot; Space front</div></div>';
     }
 
     var lastHover = -2;
     function sendHover(slot) {
-      console.log('[bar-annihilation] gridmenu CHILD hover slot=' + slot);
       try { if (window.api && api.Panel && api.Panel.query) api.Panel.query(api.Panel.parentId, 'grid:hover', { slot: slot }); } catch (e) {}
     }
     function onHoverMove(e) {
@@ -99,12 +98,8 @@
           try {
             // panel.query (not .message): 'panel.query' is always whitelisted in the
             // parent's panel.ready filter, so it reaches handlers['grid:click'] via onQuery.
-            if (window.api && api.Panel && api.Panel.query) {
-              api.Panel.query(api.Panel.parentId, 'grid:click', msg);
-              console.log('[bar-annihilation] gridmenu CHILD click slot=' + msg.slot + ' btn=' + msg.button + ' -> query sent');
-            } else {
-              console.log('[bar-annihilation] gridmenu CHILD click but api.Panel.query missing');
-            }
+            if (window.api && api.Panel && api.Panel.query) api.Panel.query(api.Panel.parentId, 'grid:click', msg);
+            else console.log('[bar-annihilation] gridmenu CHILD click but api.Panel.query missing');
           } catch (err) { console.log('[bar-annihilation] gridmenu CHILD click send error: ' + (err && err.message)); }
           return;
         }

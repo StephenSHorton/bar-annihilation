@@ -39,6 +39,7 @@
 
       var el = null, tipEl = null, pushTimer = null, lastPush = null, lastOpen = null;
       var grid = { open: false, cells: null, entries: null, title: '' };
+      var spaceHeld = false;   // hold Space = insert the build at the FRONT of the factory queue
       var diagged = {};
 
       // --- helpers -----------------------------------------------------------
@@ -181,18 +182,19 @@
           lastOpen = grid.open;
           showPanel(PANEL_ID, grid.open);
           setBodyFlag(grid.open);                          // hide/show PA's native build bar
-          if (!grid.open) showPanel(TIP_ID, false);        // drop the tooltip when the menu closes
+          if (!grid.open) { showPanel(TIP_ID, false); spaceHeld = false; }  // drop tooltip + reset Space on close
         }
         pushGrid();
       }
 
       // --- build action ------------------------------------------------------
-      function doBuild(specId, qty) {
+      function doBuild(specId, qty, immediate) {
         if (!qty) return;
+        immediate = !!immediate;                           // true => front of queue (api.unit.build's 3rd arg)
         try {
-          if (qty > 0) { if (api.unit && api.unit.build) api.unit.build(specId, qty, false); else BA.warn('gridmenu: api.unit.build missing'); }
-          else { if (api.unit && api.unit.cancelBuild) api.unit.cancelBuild(specId, -qty, false); else BA.warn('gridmenu: api.unit.cancelBuild missing'); }
-          BA.log('gridmenu build ' + specId + ' x' + qty);
+          if (qty > 0) { if (api.unit && api.unit.build) api.unit.build(specId, qty, immediate); else BA.warn('gridmenu: api.unit.build missing'); }
+          else { if (api.unit && api.unit.cancelBuild) api.unit.cancelBuild(specId, -qty, immediate); else BA.warn('gridmenu: api.unit.cancelBuild missing'); }
+          BA.log('gridmenu build ' + specId + ' x' + qty + (immediate ? ' (front)' : ''));
         } catch (e) { BA.err('gridmenu build failed ' + specId, e); }
         lastPush = null;
       }
@@ -206,14 +208,17 @@
       function isGridKey(e) { return KEYCODE_TO_SLOT[e.which] !== undefined; }
       function onKeyDown(e) {
         if (!grid.open || BA.util.uiBusy()) return;
+        if (e.which === 32) { spaceHeld = true; e.preventDefault(); e.stopImmediatePropagation(); return false; }  // Space = front-of-queue modifier
         if (!isGridKey(e)) return;
         e.preventDefault(); e.stopImmediatePropagation();
         var cell = grid.cells && grid.cells[KEYCODE_TO_SLOT[e.which]];
-        if (cell) doBuild(cell.specId, qtyFromKeyboard(e));
+        if (cell) doBuild(cell.specId, qtyFromKeyboard(e), spaceHeld);
         return false;
       }
       function onKeyUp(e) {
-        if (!grid.open || !isGridKey(e)) return;
+        if (!grid.open) return;
+        if (e.which === 32) { spaceHeld = false; e.preventDefault(); e.stopImmediatePropagation(); return false; }
+        if (!isGridKey(e)) return;
         e.preventDefault(); e.stopImmediatePropagation(); return false;
       }
       document.addEventListener('keydown', onKeyDown, true);
@@ -223,7 +228,7 @@
       function onCellClick(payload) {
         if (!grid.open || !payload) return;
         var cell = grid.cells && grid.cells[payload.slot];
-        if (cell) doBuild(cell.specId, qtyFromMouse(payload.button || 0, !!payload.shift, !!payload.ctrl));
+        if (cell) doBuild(cell.specId, qtyFromMouse(payload.button || 0, !!payload.shift, !!payload.ctrl), spaceHeld);
       }
       function tipFor(entry) {
         if (!entry) return null;
@@ -241,7 +246,6 @@
         var slot = payload.slot;
         var entry = (slot != null && slot >= 0 && grid.entries) ? grid.entries[slot] : null;
         var info = tipFor(entry);
-        BA.log('gridmenu onHover slot=' + slot + ' name=' + (info && info.name));
         if (!info) { showPanel(TIP_ID, false); return; }
         var p = api.panels[TIP_ID];
         if (p && p.id >= 0) { try { p.message('tip:show', info); } catch (e) {} }
@@ -257,7 +261,7 @@
       if (pushTimer) clearInterval(pushTimer);
       pushTimer = setInterval(tick, 150);
       tick();
-      BA.log('gridmenu ready (M3 MVP, factory path) — select a factory; key or click to build; hover for info; native build bar hidden while open');
+      BA.log('gridmenu ready (M3 MVP, factory path) — factory: key/click to build, Shift x5, Ctrl cancel(key)/x20(click), RMB cancel, hold Space = front of queue; hover for info');
     }
   });
 })();

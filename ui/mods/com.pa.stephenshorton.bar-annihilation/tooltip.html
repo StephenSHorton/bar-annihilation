@@ -50,11 +50,9 @@
         var s = JSON.stringify(payload);
         if (s === last) return;
         last = s;
-        console.log('[bar-annihilation] tooltip TIP show name=' + (payload && payload.name));
         render(payload);
       };
       app.registerWithCoherent(model, handlers);
-      console.log('[bar-annihilation] tooltip child ready');
     });
   </script>
 </body>
