@@ -34,6 +34,15 @@
     .gm-q { position:absolute; right:4px; bottom:2px; font-size:12px; font-weight:700; color:#bfffce;
             text-shadow:0 0 3px #000, 0 0 3px #000; }
     .gm-hint { margin-top:6px; font-size:9px; color:#7f93a6; }
+    .gm-sub { color:#9fc3dd; font-size:10px; font-weight:400; margin-left:6px; text-transform:none; }
+    .gm-cell.gm-cat { border-color:#5fa8e0; box-shadow:inset 0 0 0 1px rgba(95,168,224,.4); }
+    .gm-cell.gm-prev { opacity:.55; }
+    .gm-cell.gm-prev .gm-img { filter:grayscale(35%); }
+    .gm-catlabel { position:absolute; left:0; right:0; bottom:0; padding:2px 1px; font-size:9px; font-weight:700;
+                   text-align:center; color:#dcefff; background:rgba(20,46,68,0.9); letter-spacing:.02em;
+                   white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .gm-catcount { position:absolute; top:2px; left:4px; font-size:9px; font-weight:600; color:#bcd8ef;
+                   text-shadow:0 0 3px #000, 0 0 3px #000; }
   </style>
 </head>
 <body class="body_panel">
@@ -52,13 +61,22 @@
 
     function cellHtml(cell, cap, slot) {
       if (!cell) return '<div class="gm-cell empty"><div class="gm-cap">' + esc(cap) + '</div></div>';
+      var cls = 'gm-cell filled';
+      if (cell.isCategory) cls += ' gm-cat';
+      if (cell.preview) cls += ' gm-prev';
       var inner = '';
       if (cell.icon) inner += '<img class="gm-img" src="' + esc(cell.icon) + '" />';
       else inner += '<div class="gm-name">' + esc(cell.label) + '</div>';
       inner += '<div class="gm-cap">' + esc(cap) + '</div>';
-      if (cell.metal != null) inner += '<div class="gm-cost">' + num(cell.metal) + '</div>';
-      if (cell.queue > 0) inner += '<div class="gm-q">' + cell.queue + '</div>';
-      return '<div class="gm-cell filled" data-slot="' + slot + '" title="' + esc(cell.label) + '">' + inner + '</div>';
+      if (cell.isCategory) {
+        inner += '<div class="gm-catcount">' + cell.catCount + '</div>';
+        inner += '<div class="gm-catlabel">' + esc(cell.catLabel) + '</div>';
+      } else if (!cell.preview) {
+        if (cell.metal != null) inner += '<div class="gm-cost">' + num(cell.metal) + '</div>';
+        if (cell.queue > 0) inner += '<div class="gm-q">' + cell.queue + '</div>';
+      }
+      var tip = cell.isCategory ? (cell.catLabel + ' (' + cell.catCount + ')') : cell.label;
+      return '<div class="' + cls + '" data-slot="' + slot + '" title="' + esc(tip) + '">' + inner + '</div>';
     }
 
     function render(p) {
@@ -72,11 +90,13 @@
         for (var c = 0; c < 4; c++) { var i = r * 4 + c; rows += cellHtml(p.cells[i], caps[i], i); }
         rows += '</div>';
       }
-      var hint = (p.mode === 'fabber')
-        ? 'Select &rarr; click map to place &middot; drag for walls &middot; Shift queue'
-        : 'L +1 &middot; Shift &times;5 &middot; Ctrl &times;20 &middot; RMB cancel &middot; Space front';
+      var hint;
+      if (p.mode === 'home') hint = 'Z X C V: open category';
+      else if (p.mode === 'category') hint = 'Key/click to place &middot; B: page &middot; Esc/RMB: back &middot; Shift: queue';
+      else hint = 'L +1 &middot; Shift &times;5 &middot; Ctrl &times;20 &middot; RMB cancel &middot; Space front' + (p.sub ? ' &middot; B: page' : '');
+      var title = esc(p.title || 'Build') + (p.sub ? '<span class="gm-sub">' + esc(p.sub) + '</span>' : '');
       root.innerHTML = '<div class="gm-wrap">'
-        + '<div class="gm-title">' + esc(p.title || 'Build') + '</div>'
+        + '<div class="gm-title">' + title + '</div>'
         + rows
         + '<div class="gm-hint">' + hint + '</div></div>';
     }

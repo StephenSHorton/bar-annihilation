@@ -3,23 +3,29 @@
   var BA = window.BarAnnihilation; if (!BA) { return; }
 
   // ---------------------------------------------------------------------------
-  // M3 — Grid Build Menu (MVP: FACTORY path).
-  // Faithful port of BAR's gui_gridmenu: a 3x4 spatial keyboard build grid.
-  //   row 3 (top)    Q W E R   = slots 0..3
-  //   row 2 (mid)    A S D F   = slots 4..7
-  //   row 1 (bottom) Z X C V   = slots 8..11
-  // FACTORY is selected (model.selectedMobile() === false) → grid shows its
-  // buildables → key OR click enqueues via api.unit.build (no map coords).
+  // M3 — Grid Build Menu. Faithful port of BAR's gui_gridmenu: a 3x4 spatial
+  // keyboard build grid.
+  //   row (top)    Q W E R   = slots 0..3
+  //   row (mid)    A S D F   = slots 4..7
+  //   row (bottom) Z X C V   = slots 8..11
   //
-  // Features: real build icons; key + click batching (BAR factory semantics);
-  // hover tooltip panel to the right (unit name/description/stats); and while
-  // our grid is open we suppress PA's native bottom-center build bar.
+  // FACTORY (model.selectedMobile() === false): flat grid of buildables; key/click
+  // ENQUEUES via api.unit.build (no map coords). Batching: key {+1, Shift+5, Ctrl
+  // cancel-1, Shift+Ctrl-5}; mouse {+1, Shift+5, Ctrl+20, Shift+Ctrl+100, RMB
+  // negates}; hold Space = front of queue. Paged with B if > 12.
   //
-  // Rendering: a Coherent child <panel> (gridmenu.html) sized to the grid box,
-  // input-enabled for clicks. Clicks/hovers route up via api.Panel.query
-  // ('grid:click' / 'grid:hover') because panel.query is always whitelisted in
-  // the parent's panel.ready filter (custom panel.message types are dropped).
-  // A second no-input <panel> (tooltip.html) shows unit info on hover.
+  // MOBILE BUILDER (fabber/commander): 4 categories on the bottom row —
+  // Economy / Combat / Utility / Production (Z X C V). HOME shows one category per
+  // column; press Z/X/C/V to open a category (3x4 page, B to page); a cell then
+  // ENTERS PA's native placement mode (executeStartBuild -> beginFabMode: ghost,
+  // click-to-place, wall-drag, metal-spot snapping). Esc / RMB / Shift-release
+  // returns home; non-shift place returns home, Shift stays (queue).
+  //
+  // While our grid is open we suppress PA's native bottom-center build bar.
+  // Rendering: a Coherent child <panel> (gridmenu.html); a second no-input <panel>
+  // (tooltip.html) shows unit info on hover. Clicks/hover route up via
+  // api.Panel.query (panel.query is always whitelisted; custom panel.message types
+  // are dropped by the parent's panel.ready filter).
   // ---------------------------------------------------------------------------
   BA.register({
     name: 'gridmenu',
@@ -36,10 +42,21 @@
       // grid keys in VISUAL reading order (top-left -> bottom-right); index = slot.
       var CAPS = ['Q','W','E','R','A','S','D','F','Z','X','C','V'];
       var KEYCODE_TO_SLOT = { 81:0, 87:1, 69:2, 82:3, 65:4, 83:5, 68:6, 70:7, 90:8, 88:9, 67:10, 86:11 };
+      // BAR numbers cells bottom-up; a category page / gap-filler fills ascending
+      // index = bottom row first. In our top-down slots that is:
+      var FILL_ORDER = [8, 9, 10, 11, 4, 5, 6, 7, 0, 1, 2, 3];
+      var CAT_LABELS = ['ECONOMY', 'COMBAT', 'UTILITY', 'PRODUCTION'];
+      var KEY_B = 66, KEY_ESC = 27, KEY_SHIFT = 16, KEY_SPACE = 32;
 
       var el = null, tipEl = null, pushTimer = null, lastPush = null, lastOpen = null;
-      var grid = { open: false, cells: null, entries: null, title: '', isFactory: true };
-      var spaceHeld = false;   // hold Space = insert the build at the FRONT of the factory queue
+      // raw model + rendered view, both kept on `grid`
+      var grid = {
+        open: false, isFactory: true, title: '', builderKey: null,
+        cats: null, flat: null, orders: {},          // raw data
+        cells: null, entries: null, mode: 'factory', sub: '', pages: 1   // rendered
+      };
+      var nav = { category: null, page: 1, peek: false };   // user navigation state
+      var spaceHeld = false;   // factory: hold Space = front of queue
       var diagged = {};
 
       // --- helpers -----------------------------------------------------------
@@ -56,6 +73,7 @@
         if (entry && typeof entry === 'object') return entry.id || entry.spec || entry.key || null;
         return null;
       }
+      function biOf(entry) { var v = entryField(entry, buildIdOf(entry), 'buildIndex'); return (typeof v === 'number') ? v : 9999; }
       function diagOnce(spec, us) {
         if (diagged[spec]) return; diagged[spec] = true;
         try {
@@ -66,8 +84,19 @@
         } catch (e) {}
       }
 
-      // --- compute the cell model from the live selection (factory only) ------
-      function computeCells() {
+      // BAR categoryGroupMapping, ported to PA's buildGroup + path (economy is
+      // buried in PA's 'utility' group, so split it out by path).
+      function categoryOf(entry) {
+        var id = String(buildIdOf(entry));
+        if (/(metal_extractor|energy_plant|metal_storage|energy_storage|metal_maker)/.test(id)) return 0; // Economy
+        var g = entryField(entry, buildIdOf(entry), 'buildGroup');
+        if (g === 'combat' || g === 'ammo') return 1;   // Combat
+        if (g === 'factory') return 3;                  // Production
+        return 2;                                       // Utility (radar/jammer/teleporter/orbital/fallback)
+      }
+
+      // --- read the live selection into raw data (no view/nav) ----------------
+      function rawCompute() {
         if (typeof model === 'undefined' || !model.selection || !model.unitSpecs) return null;
         var sel; try { sel = model.selection(); } catch (e) { return null; }
         if (!sel || !sel.spec_ids) return null;
@@ -92,24 +121,75 @@
         }
         if (!items.length) return null;
 
-        var orders = sel.build_orders || {};
-        var cells = [], entries = [];
-        for (var c = 0; c < 12; c++) {
-          var entry = items[c];
-          if (!entry) { cells.push(null); entries.push(null); continue; }
-          var id2 = buildIdOf(entry), b = baseSpec(id2);
-          entries.push(entry);
-          cells.push({
-            specId: id2,
-            label: locStrip(entryField(entry, id2, 'name')) || nameOf(id2),
-            icon: entryField(entry, id2, 'buildIcon') || null,
-            metal: entryField(entry, id2, 'cost'),
-            queue: orders[id2] || orders[b] || 0
-          });
-        }
         var facUs = model.unitSpecs[specs[0]] || model.unitSpecs[baseSpec(specs[0])];
-        var title = locStrip((facUs && facUs.name)) || nameOf(specs[0]);
-        return { cells: cells, entries: entries, title: title, isFactory: !mobile };
+        var title = locStrip(facUs && facUs.name) || nameOf(specs[0]);
+        var key = specs.slice().sort().join(',');
+        var orders = sel.build_orders || {};
+
+        if (!mobile) return { isFactory: true, title: title, flat: items, orders: orders, builderKey: key };
+
+        var cats = [[], [], [], []];
+        for (var c = 0; c < items.length; c++) cats[categoryOf(items[c])].push(items[c]);
+        for (var cc = 0; cc < 4; cc++) cats[cc].sort(function (a, b) { return biOf(a) - biOf(b); });
+        return { isFactory: false, title: title, cats: cats, orders: orders, builderKey: key };
+      }
+
+      // --- slice raw data + nav into the 12 visible cells ---------------------
+      function renderView() {
+        var cells = new Array(12), entries = new Array(12);
+        for (var z = 0; z < 12; z++) { cells[z] = null; entries[z] = null; }
+        var orders = grid.orders || {};
+        function put(slot, entry, extra) {
+          var id = buildIdOf(entry), b = baseSpec(id);
+          var cell = {
+            specId: id,
+            label: locStrip(entryField(entry, id, 'name')) || nameOf(id),
+            icon: entryField(entry, id, 'buildIcon') || null,
+            metal: entryField(entry, id, 'cost'),
+            queue: orders[id] || orders[b] || 0
+          };
+          if (extra) for (var kk in extra) cell[kk] = extra[kk];
+          cells[slot] = cell; entries[slot] = entry;
+        }
+
+        grid.pages = 1; grid.sub = '';
+
+        if (grid.isFactory) {
+          grid.mode = 'factory';
+          var list = grid.flat || [];
+          grid.pages = Math.max(1, Math.ceil(list.length / 12));
+          if (nav.page > grid.pages) nav.page = grid.pages;
+          var off = (nav.page - 1) * 12;
+          for (var s = 0; s < 12; s++) { var e = list[off + s]; if (e) put(s, e); }
+          if (grid.pages > 1) grid.sub = 'Page ' + nav.page + '/' + grid.pages;
+
+        } else if (nav.category === null) {
+          grid.mode = 'home';
+          var any = false;
+          for (var cat = 0; cat < 4; cat++) {
+            var cl = grid.cats[cat] || [];
+            if (!cl.length) continue;
+            any = true;
+            var colSlots = [8 + cat, 4 + cat, 0 + cat];   // bottom, mid, top
+            for (var n = 0; n < 3; n++) {
+              var ent = cl[n]; if (!ent) break;
+              if (n === 0) put(colSlots[0], ent, { isCategory: true, catLabel: CAT_LABELS[cat], catCount: cl.length });
+              else put(colSlots[n], ent, { preview: true });
+            }
+          }
+          grid.sub = any ? 'Pick a category' : '';
+
+        } else {
+          grid.mode = 'category';
+          var cidx = nav.category, l2 = grid.cats[cidx] || [];
+          grid.pages = Math.max(1, Math.ceil(l2.length / 12));
+          if (nav.page > grid.pages) nav.page = grid.pages;
+          var o2 = (nav.page - 1) * 12;
+          for (var i2 = 0; i2 < 12; i2++) { var e2 = l2[o2 + i2]; if (e2) put(FILL_ORDER[i2], e2); }
+          grid.sub = CAT_LABELS[cidx] + (grid.pages > 1 ? (' ' + nav.page + '/' + grid.pages) : '');
+        }
+
+        grid.cells = cells; grid.entries = entries;
       }
 
       // --- panels ------------------------------------------------------------
@@ -144,12 +224,13 @@
       function pushGrid() {
         var p = api.panels[PANEL_ID];
         if (!p || p.id === undefined || p.id < 0) return;
-        var payload = { open: grid.open, cells: grid.cells, caps: CAPS, title: grid.title, mode: grid.isFactory ? 'factory' : 'fabber' };
+        var payload = { open: grid.open, mode: grid.mode, cells: grid.cells, caps: CAPS, title: grid.title, sub: grid.sub };
         var s = JSON.stringify(payload);
         if (s === lastPush) return;
         lastPush = s;
         try { p.message('grid:update', payload); } catch (e) { BA.warn('gridmenu push failed: ' + (e && e.message)); }
       }
+      function repaint() { lastPush = null; if (grid.open) renderView(); pushGrid(); }
 
       // --- suppress PA's native build bar while our grid is open -------------
       function injectStyle() {
@@ -171,25 +252,49 @@
         } catch (e) {}
       }
 
-      // --- per-tick: recompute, open/close, push -----------------------------
+      // --- per-tick: recompute raw, reset nav on builder change, render, push -
       function tick() {
         var g = null;
-        try { g = computeCells(); } catch (e) { BA.warn('gridmenu compute failed: ' + (e && e.message)); }
-        if (g) { grid.open = true; grid.cells = g.cells; grid.entries = g.entries; grid.title = g.title; grid.isFactory = g.isFactory; }
-        else { grid.open = false; grid.cells = null; grid.entries = null; grid.title = ''; }
+        try { g = rawCompute(); } catch (e) { BA.warn('gridmenu compute failed: ' + (e && e.message)); }
+        if (g) {
+          if (g.builderKey !== grid.builderKey) { nav.category = null; nav.page = 1; nav.peek = false; }
+          grid.open = true; grid.isFactory = g.isFactory; grid.cats = g.cats || null; grid.flat = g.flat || null;
+          grid.orders = g.orders || {}; grid.title = g.title; grid.builderKey = g.builderKey;
+        } else {
+          grid.open = false; grid.cats = null; grid.flat = null; grid.cells = null; grid.entries = null; grid.builderKey = null;
+          nav.category = null; nav.page = 1; nav.peek = false;
+        }
         if (grid.open !== lastOpen) {
           lastOpen = grid.open;
           showPanel(PANEL_ID, grid.open);
           setBodyFlag(grid.open);                          // hide/show PA's native build bar
-          if (!grid.open) { showPanel(TIP_ID, false); spaceHeld = false; }  // drop tooltip + reset Space on close
+          if (!grid.open) { showPanel(TIP_ID, false); spaceHeld = false; }
         }
+        if (grid.open) renderView();
         pushGrid();
       }
 
-      // --- build action ------------------------------------------------------
-      function doBuild(specId, qty, immediate) {
+      // --- navigation --------------------------------------------------------
+      function openCategory(cat, peek) {
+        if (grid.isFactory || !grid.cats || !grid.cats[cat] || !grid.cats[cat].length) return;
+        nav.category = cat; nav.page = 1; nav.peek = !!peek;
+        showPanel(TIP_ID, false); repaint();
+      }
+      function goHome() {
+        if (grid.isFactory || nav.category === null) return;
+        nav.category = null; nav.page = 1; nav.peek = false;
+        showPanel(TIP_ID, false); repaint();
+      }
+      function nextPage() {
+        if (!grid.open || (grid.pages || 1) < 2) return;
+        nav.page = (nav.page >= grid.pages) ? 1 : nav.page + 1;
+        repaint();
+      }
+
+      // --- build actions -----------------------------------------------------
+      function doBuild(specId, qty, immediate) {       // factory: enqueue
         if (!qty) return;
-        immediate = !!immediate;                           // true => front of queue (api.unit.build's 3rd arg)
+        immediate = !!immediate;                        // true => front of queue
         try {
           if (qty > 0) { if (api.unit && api.unit.build) api.unit.build(specId, qty, immediate); else BA.warn('gridmenu: api.unit.build missing'); }
           else { if (api.unit && api.unit.cancelBuild) api.unit.cancelBuild(specId, -qty, immediate); else BA.warn('gridmenu: api.unit.cancelBuild missing'); }
@@ -202,37 +307,46 @@
         var base = shift ? (ctrl ? 100 : 5) : (ctrl ? 20 : 1);
         return (button === 2) ? -base : base;
       }
-
-      // fabber / mobile builder: trigger PA's OWN placement mode (ghost preview,
-      // click-to-place, wall-drag, metal-spot snapping) by calling the same handler
-      // the native build bar uses (live_game.js executeStartBuild -> beginFabMode).
-      function enterFab(specId, shift, ctrl, cancel) {
+      // fabber: enter PA's native placement mode (same handler as the stock bar).
+      function enterFab(specId, shift, ctrl) {
         try {
-          if (model.executeStartBuild) {
-            model.executeStartBuild({ item: specId, batch: !!shift, cancel: !!cancel, urgent: !!ctrl, more: false });
-          } else if (api.arch && api.arch.beginFabMode) {
-            api.arch.beginFabMode(specId); if (model.mode) model.mode('fab');
-          } else { BA.warn('gridmenu: no fab-mode entry'); return; }
-          BA.log('gridmenu fab ' + specId + (cancel ? ' (cancel)' : ''));
+          if (model.executeStartBuild) model.executeStartBuild({ item: specId, batch: !!shift, cancel: false, urgent: !!ctrl, more: false });
+          else if (api.arch && api.arch.beginFabMode) { api.arch.beginFabMode(specId); if (model.mode) model.mode('fab'); }
+          else { BA.warn('gridmenu: no fab-mode entry'); return; }
+          BA.log('gridmenu fab ' + specId);
         } catch (e) { BA.err('gridmenu fab failed ' + specId, e); }
       }
 
-      // --- keyboard (capture phase, consume both keydown + keyup while open) --
+      // --- keyboard (capture phase, consume while open) ----------------------
       function isGridKey(e) { return KEYCODE_TO_SLOT[e.which] !== undefined; }
+      function consume(e) { e.preventDefault(); e.stopImmediatePropagation(); }
       function onKeyDown(e) {
         if (!grid.open || BA.util.uiBusy()) return;
-        if (e.which === 32) { spaceHeld = true; e.preventDefault(); e.stopImmediatePropagation(); return false; }  // Space = front-of-queue modifier
+        var w = e.which;
+        if (w === KEY_SPACE) { if (grid.isFactory) { spaceHeld = true; consume(e); return false; } return; }
+        if (w === KEY_B) { consume(e); nextPage(); return false; }
+        if (w === KEY_ESC) { if (!grid.isFactory && nav.category !== null) { consume(e); goHome(); return false; } return; }
         if (!isGridKey(e)) return;
-        e.preventDefault(); e.stopImmediatePropagation();
-        var cell = grid.cells && grid.cells[KEYCODE_TO_SLOT[e.which]];
-        if (cell) { if (grid.isFactory) doBuild(cell.specId, qtyFromKeyboard(e), spaceHeld); else enterFab(cell.specId, e.shiftKey, e.ctrlKey, false); }
+        consume(e);
+        var slot = KEYCODE_TO_SLOT[w];
+        // mobile + home: Z X C V open categories; the rest are inert
+        if (!grid.isFactory && nav.category === null) {
+          if (slot >= 8 && !e.ctrlKey && !e.altKey) openCategory(slot - 8, e.shiftKey);
+          return false;
+        }
+        var cell = grid.cells && grid.cells[slot];
+        if (!cell) return false;
+        if (grid.isFactory) doBuild(cell.specId, qtyFromKeyboard(e), spaceHeld);
+        else { enterFab(cell.specId, e.shiftKey, e.ctrlKey); if (!e.shiftKey) goHome(); }
         return false;
       }
       function onKeyUp(e) {
         if (!grid.open) return;
-        if (e.which === 32) { spaceHeld = false; e.preventDefault(); e.stopImmediatePropagation(); return false; }
+        var w = e.which;
+        if (w === KEY_SPACE) { spaceHeld = false; if (grid.isFactory) { consume(e); return false; } return; }
+        if (w === KEY_SHIFT) { if (nav.peek && nav.category !== null) goHome(); return; }
         if (!isGridKey(e)) return;
-        e.preventDefault(); e.stopImmediatePropagation(); return false;
+        consume(e); return false;
       }
       document.addEventListener('keydown', onKeyDown, true);
       document.addEventListener('keyup', onKeyUp, true);
@@ -240,11 +354,13 @@
       // --- mouse: click + hover routed up from the child panel ---------------
       function onCellClick(payload) {
         if (!grid.open || !payload) return;
-        var cell = grid.cells && grid.cells[payload.slot];
-        if (cell) {
-          if (grid.isFactory) doBuild(cell.specId, qtyFromMouse(payload.button || 0, !!payload.shift, !!payload.ctrl), spaceHeld);
-          else enterFab(cell.specId, !!payload.shift, !!payload.ctrl, (payload.button === 2));
-        }
+        var slot = payload.slot;
+        if (grid.mode === 'home') { if (slot != null && slot >= 0) openCategory(slot % 4, false); return; }
+        var cell = grid.cells && grid.cells[slot];
+        if (!cell) return;
+        if (grid.mode === 'category' && payload.button === 2) { goHome(); return; }   // RMB = back
+        if (grid.isFactory) doBuild(cell.specId, qtyFromMouse(payload.button || 0, !!payload.shift, !!payload.ctrl), spaceHeld);
+        else { enterFab(cell.specId, !!payload.shift, !!payload.ctrl); if (!payload.shift) goHome(); }
       }
       function tipFor(entry) {
         if (!entry) return null;
@@ -283,7 +399,8 @@
       // same frame the native build bar would appear. Kills the select-commander flash.
       try { if (model.selection && model.selection.subscribe) model.selection.subscribe(tick); }
       catch (e) { BA.warn('gridmenu: selection subscribe failed: ' + (e && e.message)); }
-      BA.log('gridmenu ready (M3) — factory: key/click build (Shift x5, Ctrl cancel(key)/x20(click), RMB cancel, Space=front); fabber: key/click enters placement, then click map to place; hover for info');
+      BA.log('gridmenu ready (M3) — factory: flat grid + batching, Space=front, B=page; '
+        + 'fabber: Z/X/C/V categories (Economy/Combat/Utility/Production), B=page, Esc/RMB=back; hover for info');
     }
   });
 })();

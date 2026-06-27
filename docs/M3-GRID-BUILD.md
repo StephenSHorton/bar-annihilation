@@ -45,6 +45,28 @@ The faithful target is `gui_gridmenu.lua` + `gridmenu_config.lua` + `gridmenu_la
 
 ---
 
+## VERIFIED BAR CATEGORY SPEC (2026-06-26, from BAR @master source) + PA mapping
+
+Confirmed verbatim from `luaui/configs/gridmenu_config.lua`, `gui_gridmenu.lua`, `luaui/configs/hotkeys/gridmenu_keys.txt`:
+
+- **Grid is 3×4, indices numbered bottom-up:** cells 1-4 = bottom row (Z X C V), 5-8 = middle (A S D F), 9-12 = top (Q W E R). Physical scancodes (`sc_z` etc.), layout-independent.
+- **Exactly 4 categories, fixed order = column:** `Economy(1) Combat(2) Utility(3) Production(4)`. Category index ↔ column 1:1. Z X C V (bottom row) are the 4 category keys.
+- **Unit→category** = `categoryGroupMapping[unitDef.customParams.unitgroup]`, **default Utility**:
+  `energy,metal→Economy`; `builder,buildert2/3/4→Production`; `util→Utility`; `weapon,explo,weaponaa,weaponsub,aa,emp,sub,nuke,antinuke→Combat`.
+- **Home overview** (`homeOptionsForBuilder`): each column = one category; the category's first ≤3 buildables fill that column **bottom-up** (`index = cat + (k-1)*4`); the **top row** of each column is overridden with a priority unit (`PriorityUnits`) when one exists.
+- **Z/X/C/V dual-purpose:** no category open → `gridmenu_category N` consumes (opens category); a category open → the category handler bails (`currentCategory and cellRects[i]`) so `gridmenu_key 1 N` builds the bottom cell. Non-shift modifiers (ctrl/alt) always route to the grid-key.
+- **Shift peek + return:** explicit `Shift+sc_z..v` binds open (peek) a category; releasing **LShift** → `clearCategory()` (home). After a build, `CommandNotify` returns home **unless** the order was shift-queued (`alwaysReturn` setting forces always).
+- **Paging:** `sc_b` = `gridmenu_next_page`, **wraps** 1→N→1 (no prev bound); `pages = ceil(count/12)`; `sc_.` = cycle builder.
+- **Factory:** flat hand-authored 12-slot grid (`LabGrids`), **no categories**; grid keys queue directly; paged with B if >12.
+- **Gap-filler:** un-slotted buildables fill the first empty cells scanning index 1→12 (bottom-left first).
+
+**PA mapping (our port).** PA has no `unitgroup`, but each buildable carries `buildGroup` (+ `buildIndex`/`buildRow`/`buildColumn`) from `shared/js/build.js` `HotkeyModel.SpecIdToGridMap`. PA's groups = `factory, combat, utility, vehicle, bot, air, sea, orbital, orbital_structure, ammo` (`live_game_build_bar.js:405` tabsTemplate). PA **buries economy inside `utility`**, so we split it out by path:
+- Economy ← path matches `metal_extractor|energy_plant|metal_storage|energy_storage|metal_maker`
+- Combat ← `buildGroup ∈ {combat, ammo}`
+- Production ← `buildGroup === 'factory'`
+- Utility ← everything else (radar/jammer/teleporter/barrier/orbital/fallback)
+Order within a category = PA `buildIndex`. (Fabbers build only structures, so these 4 cover everything; `PriorityUnits` top-row override deferred — needs hand-authored data; `.`-cycle-builder deferred.)
+
 ## Architecture
 
 ### Overlay (reuse the `<panel>` pattern)
