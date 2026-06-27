@@ -197,7 +197,10 @@
       document.addEventListener('keydown', onKeyDownCap, true);
       document.addEventListener('keyup', onKeyUpCap, true);
 
-      BA.log('keyboard overlay ready (panel view) — press the backslash key to toggle; hold Ctrl/Shift/Alt for layers');
+      var H = (typeof handlers !== 'undefined' && handlers) ? handlers : (window.handlers || null);
+      if (H) H['overlay:close'] = hide;   // child reports a backdrop click -> close
+
+      BA.log('keyboard overlay ready (panel view) — backslash or the grid menu "Keys" button to toggle; click outside / Esc to close');
     }
   });
 })();

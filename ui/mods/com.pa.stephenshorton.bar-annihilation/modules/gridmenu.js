@@ -429,7 +429,11 @@
         showPanel(TIP_ID, true);
       }
       var H = (typeof handlers !== 'undefined' && handlers) ? handlers : (window.handlers || null);
-      if (H) { H['grid:click'] = onCellClick; H['grid:hover'] = onHover; H['grid:back'] = function () { goHome(); }; H['grid:page'] = function () { nextPage(); }; }
+      if (H) {
+        H['grid:click'] = onCellClick; H['grid:hover'] = onHover;
+        H['grid:back'] = function () { goHome(); }; H['grid:page'] = function () { nextPage(); };
+        H['grid:keys'] = function () { if (BA && BA.overlayToggle) BA.overlayToggle(); };   // "Keys" button -> keyboard overlay
+      }
       else BA.warn('gridmenu: no handlers map — clicks/hover will not route');
 
       // --- boot --------------------------------------------------------------

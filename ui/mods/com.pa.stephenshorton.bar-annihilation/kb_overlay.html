@@ -59,7 +59,7 @@
         + '<span><span class="kb-swatch" style="background:#1c3145;border:1px solid #3f7fb0;"></span>PA action</span>'
         + '<span><span class="kb-swatch" style="background:#2a2410;border:1px solid #d2a73a;"></span>BAR Annihilation (overrides PA)</span>'
         + '<span><span class="kb-swatch" style="background:#2f5a3a;border:1px solid #5fbf7f;"></span>modifier / active layer</span>'
-        + '<span>Hold a modifier or click a tab &mdash; Esc to close</span></div>';
+        + '<span>Hold a modifier or click a tab &mdash; click outside or Esc to close</span></div>';
     }
 
     function render() {
@@ -90,14 +90,16 @@
         state.held = payload.held || '';
         render();
       };
-      // tab clicks (event delegation; tabs carry data-combo)
+      // tab clicks switch layer; a click on the dark backdrop (outside the panel) closes
       document.addEventListener('click', function (e) {
-        var t = e.target;
+        var t = e.target, inPanel = false;
         while (t && t.getAttribute) {
           var combo = t.getAttribute('data-combo');
           if (combo !== null) { state.clicked = combo; render(); return; }
+          if (t.className && (' ' + t.className + ' ').indexOf(' kb-panel ') >= 0) inPanel = true;
           t = t.parentNode;
         }
+        if (!inPanel) { try { if (window.api && api.Panel && api.Panel.query) api.Panel.query(api.Panel.parentId, 'overlay:close', {}); } catch (err) {} }
       });
       app.registerWithCoherent(model, handlers);
     });

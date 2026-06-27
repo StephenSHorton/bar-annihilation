@@ -14,7 +14,10 @@
                background:rgba(12,18,26,0.92); border:1px solid #2b6c9c; border-radius:0;
                box-shadow:0 8px 36px rgba(0,0,0,.55); }
     .gm-title { font-size:12px; color:#7fd1ff; letter-spacing:.03em; margin-bottom:6px; text-transform:uppercase;
-                white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+                white-space:nowrap; overflow:hidden; text-overflow:ellipsis; padding-right:48px; }
+    .gm-keys { position:absolute; top:7px; right:9px; padding:1px 7px; font-size:10px; font-weight:600;
+               color:#cfe3f2; background:rgba(43,108,156,0.3); border:1px solid #2b6c9c; cursor:pointer; letter-spacing:.02em; }
+    .gm-keys:hover { background:rgba(95,168,224,0.45); border-color:#5fa8e0; }
     .gm-row { display:flex; margin-bottom:5px; }
     .gm-row:last-of-type { margin-bottom:0; }
     .gm-cell { position:relative; width:74px; height:60px; margin-right:5px; box-sizing:border-box;
@@ -99,6 +102,7 @@
       var page = (p.pages > 1) ? '<div class="gm-btn gm-page" data-action="page">B | Page ' + p.page + '/' + p.pages + ' &#8594;</div>' : '';
       var foot = (back || page) ? ('<div class="gm-foot">' + back + page + '</div>') : '';
       root.innerHTML = '<div class="gm-wrap">'
+        + '<div class="gm-keys" data-action="keys">Keys</div>'
         + '<div class="gm-title">' + title + '</div>'
         + rows
         + foot + '</div>';
@@ -118,9 +122,10 @@
       var t = e.target;
       while (t && t.getAttribute) {
         var act = t.getAttribute('data-action');
-        if (act === 'back' || act === 'page') {
+        if (act === 'back' || act === 'page' || act === 'keys') {
           e.preventDefault();
-          try { if (window.api && api.Panel && api.Panel.query) api.Panel.query(api.Panel.parentId, act === 'back' ? 'grid:back' : 'grid:page', {}); } catch (err) {}
+          var type = act === 'back' ? 'grid:back' : (act === 'page' ? 'grid:page' : 'grid:keys');
+          try { if (window.api && api.Panel && api.Panel.query) api.Panel.query(api.Panel.parentId, type, {}); } catch (err) {}
           return;
         }
         var s = t.getAttribute('data-slot');
