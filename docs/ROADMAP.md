@@ -12,6 +12,17 @@ engine support, may not port.
 
 ---
 
+## Current status — v0.0.1 released (2026-06-27)
+
+First public release is out (GitHub Releases; the CI workflow builds + attaches the
+mod zip on a published release). **Shipped:** M0 (API verified), part of M1
+(selection power tools — several real BAR Grid binds, plus the keyboard overlay now
+toggled by a movable on-screen **Keys** button), and **M3 (grid build menu)**.
+**In progress:** M1 (the faithful `select` DSL tiers). **Next up:** M4 build
+placement, then M5 area commands / M6 formations.
+
+---
+
 ## M0 — Verify the PA `live_game` API  ✅ DONE (2026-06-25)
 Mod injects into `live_game` and runs; `model.selection()` returns real unit data;
 `api.select.*`, `api.unit.*`, `api.Holodeck`, input hooks all confirmed. Deliverable
@@ -58,10 +69,17 @@ shadow → InHotkeyGroup/InGroup_n; (7) the Visible snapshot-hack → faithful `
 order-queue read); world→screen projection (no JS frustum → `Visible` only via the engine
 on-screen-select hack); generic per-unit idle (native idle exists only for fabbers/factories).
 
-## M3 — Grid build menu  *(c)*
-Spatial keyboard build grid + category keys (BAR's `gui_gridmenu`). Hotbuild2 is
-proof-of-concept; build our own Coherent overlay + keymap. Includes build-queue
-quantity batching.
+## M3 — Grid build menu  *(c)*  ✅ DONE (2026-06-27)
+Spatial 3×4 keyboard build grid (BAR's `gui_gridmenu`), our own Coherent overlay +
+keymap. **Shipped:** real build icons; **factory + mobile-builder (fabber)** support;
+BAR build categories Economy/Combat/Utility/Production on Z X C V (home overview =
+category buttons + a top quick-access row, advanced/basic dedup); click + hotkey
+batching (Shift ×5, Ctrl cancel, hold **Space** = front of queue); fabber ghost
+placement via PA's native build mode; hover tooltip (name/desc/stats); native build
+bar suppressed while open. Design + verified BAR category spec in
+[`M3-GRID-BUILD.md`](./M3-GRID-BUILD.md). **Deferred polish:** BAR `PriorityUnits`
+top-row override (needs hand-authored data), `.`-key cycle-builder, fabber
+auto-return-after-place timing.
 
 ## M4 — Build placement: spacing, line & area build  *(b)*
 Build-spacing modifier + persistent spacing, line build (drag a row), area build
@@ -90,7 +108,9 @@ BAR-like defaults out of the box.
 
 ### Cross-cutting
 - Keep each feature an independent module under `ui/mods/<id>/modules/`,
-  registered in `live_game.js`, so any can be toggled off.
+  registered via the `core.js` module registry (`BA.register`), so any can be
+  toggled off. (The old monolithic `live_game.js` was split into `core.js` +
+  `modules/` on 2026-06-26.)
 - Re-test on the installed game every milestone; update `modinfo.json` `build`.
 - Items in bucket (d) (terraform/D-gun/cloak/stockpile analogs, wait-family,
   engine selection-volume queries) are explicitly out of scope until proven
