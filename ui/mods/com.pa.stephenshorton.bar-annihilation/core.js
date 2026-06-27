@@ -136,7 +136,11 @@
     if (dragWatch) { clearTimeout(dragWatch); dragWatch = null; }
     if (!dragActive) return;                 // a backup drag:end from the panel's own child is a no-op
     var el = document.getElementById(dragActive.id);
-    if (el && dragActive.key) dragPosSet(dragActive.key, { left: parseInt(el.style.left, 10) || 0, top: parseInt(el.style.top, 10) || 0 });
+    if (el && dragActive.key) {
+      var L = parseInt(el.style.left, 10) || 0, T = parseInt(el.style.top, 10) || 0;
+      dragPosSet(dragActive.key, { left: L, top: T });
+      log('drag: ' + dragActive.key + ' placed at left=' + L + ' top=' + T);
+    }
     dragShowLayer(false); dragActive = null;
   }
 

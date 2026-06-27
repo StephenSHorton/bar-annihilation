@@ -19,12 +19,25 @@
   <div id="dl"></div>
   <script type="text/javascript">
     var model = {}, handlers = {};
-    function rep(type, e) {
-      try { if (window.api && api.Panel && api.Panel.query) api.Panel.query(api.Panel.parentId, type, { x: e.clientX, y: e.clientY }); } catch (err) {}
+    var pend = null, raf = 0;
+    function send(type, x, y) {
+      try { if (window.api && api.Panel && api.Panel.query) api.Panel.query(api.Panel.parentId, type, { x: x, y: y }); } catch (err) {}
     }
+    function flush() { raf = 0; if (pend) { send('drag:move', pend.x, pend.y); pend = null; } }
     $(document).ready(function () {
-      document.addEventListener('mousemove', function (e) { rep('drag:move', e); }, false);
-      document.addEventListener('mouseup',   function (e) { rep('drag:end',  e); }, false);
+      // Coalesce raw mousemoves to one update per animation frame: a Coherent
+      // query + panel reposition per raw move backs up and feels laggy; sending
+      // only the freshest position each frame is smooth and never queues.
+      document.addEventListener('mousemove', function (e) {
+        pend = { x: e.clientX, y: e.clientY };
+        if (window.requestAnimationFrame) { if (!raf) raf = requestAnimationFrame(flush); }
+        else send('drag:move', e.clientX, e.clientY);
+      }, false);
+      document.addEventListener('mouseup', function (e) {
+        if (raf && window.cancelAnimationFrame) { cancelAnimationFrame(raf); raf = 0; }
+        if (pend) { send('drag:move', pend.x, pend.y); pend = null; }   // flush the final position first
+        send('drag:end', e.clientX, e.clientY);
+      }, false);
       app.registerWithCoherent(model, handlers);
     });
   </script>

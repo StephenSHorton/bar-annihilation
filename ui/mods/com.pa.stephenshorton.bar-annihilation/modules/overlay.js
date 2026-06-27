@@ -221,6 +221,7 @@
       ensurePanel();   // pre-create the overlay panel (hidden) so the first open is instant
       ensureButton();
       if (BA.drag) BA.drag.makeDraggable(BTN_ID, 'keysbtn');   // drag to reposition; remembers where you put it
+      setTimeout(function () { var e = document.getElementById(BTN_ID); if (e) { var r = e.getBoundingClientRect(); BA.log('keys button at left=' + Math.round(r.left) + ' top=' + Math.round(r.top)); } }, 800);
 
       BA.log('keyboard overlay ready (panel view) — backslash or the top-right "Keys" button to toggle; click outside / Esc to close');
     }
