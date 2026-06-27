@@ -68,7 +68,6 @@
       };
       var nav = { category: null, page: 1 };   // user navigation state
       var spaceHeld = false;   // factory: hold Space = front of queue
-      var diagged = {};
 
       // --- helpers -----------------------------------------------------------
       function baseSpec(id) { var m = String(id).match(/^(.*\.json)/); return m ? m[1] : String(id); }
@@ -85,15 +84,6 @@
         return null;
       }
       function biOf(entry) { var v = entryField(entry, buildIdOf(entry), 'buildIndex'); return (typeof v === 'number') ? v : 9999; }
-      function diagOnce(spec, us) {
-        if (diagged[spec]) return; diagged[spec] = true;
-        try {
-          var keys = us ? Object.keys(us) : null;
-          var sample = (us && us.build && us.build.length) ? us.build[0] : null;
-          BA.log('gridmenu DIAG spec=' + spec + ' keys=' + JSON.stringify(keys)
-            + ' build.len=' + ((us && us.build && us.build.length) || 0) + ' build[0]=' + JSON.stringify(sample));
-        } catch (e) {}
-      }
 
       // BAR categoryGroupMapping, ported to PA's buildGroup + path (economy is
       // buried in PA's 'utility' group, so split it out by path).
@@ -142,7 +132,6 @@
         var seen = {}, items = [];
         for (var i = 0; i < specs.length; i++) {
           var us = model.unitSpecs[specs[i]] || model.unitSpecs[baseSpec(specs[i])];
-          diagOnce(specs[i], us);
           var bl = us && us.build;
           if (!bl || !bl.length) continue;
           for (var j = 0; j < bl.length; j++) {

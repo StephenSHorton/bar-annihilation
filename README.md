@@ -10,8 +10,9 @@ to run in any online match regardless of what other players use. Think of it as
 a PA port of BAR's LuaUI control widgets, rewritten in JavaScript against PA's
 Coherent UI layer.
 
-> Status: **scaffolding (v0.0.1)** — project set up; control features not yet
-> implemented. The full feature spec is researched and locked (see below).
+> Status: **early release (v0.0.1)** — a first cut of the control scheme is
+> playable; more BAR features are landing per the roadmap. The full feature spec
+> is researched and locked (see below).
 
 ## What's here
 
@@ -20,6 +21,7 @@ Coherent UI layer.
 | `modinfo.json` | PA client-mod manifest (injects into the `live_game` scene) |
 | `ui/mods/com.pa.stephenshorton.bar-annihilation/core.js` | Entry point / module bootstrap (defines `window.BarAnnihilation`, loaded first) |
 | `ui/mods/com.pa.stephenshorton.bar-annihilation/modules/` | One file per control feature (added per roadmap) |
+| `dev/` | Developer-only tools (e.g. a PA API probe) — not loaded or shipped with the mod |
 | `docs/BAR-Control-Scheme-Catalog.md` | **The spec** — ~225 BAR control features from source, each with default bind, engine `CMD.*` vs widget, source file, and a PA-porting triage |
 | `docs/ROADMAP.md` | Build order, grouped by porting difficulty |
 | `docs/research/` | Raw research artifacts (source pass, web cross-check, reconciliation appendix) |
@@ -52,14 +54,25 @@ Coherent UI layer.
 4. UI `console.log` lands in `log\PA-<timestamp>.txt` as `[JS/game]` lines; or attach the
    Coherent UI Debugger with launch option `--coherent_port=9999`.
 
-## Open items before real coding
+## Implemented so far (v0.0.1)
 
-- **`build` number** in `modinfo.json` is a placeholder (`94684`). Update it to
-  the build actually tested against once we run it on the installed game.
-- **M0 — verify the `live_game` API**: confirm how PA exposes selection, order
-  issuing, queue insert/remove, and input hooks. This de-risks the whole
-  roadmap and is the next task. Reference mod: Hotbuild2 (proves grid-build is
-  feasible).
+- **Smart selection** (real BAR Grid keys, full PA override): select commander
+  (Tab), cycle idle builders (Ctrl+Tab), split selection in half (Ctrl+Q), select
+  all combat units (Ctrl+E), select same type on screen (Q). Control groups keep
+  PA's native double-tap-to-center behavior.
+- **Grid build menu** for factories and mobile builders — real build icons, BAR
+  build categories (Economy / Combat / Utility / Production on Z X C V), a top row
+  of quick-access buildings, click + hotkey batching (Shift ×5, Ctrl to cancel,
+  hold Space = front of queue), and ghost placement for fabbers via PA's native
+  build mode.
+- **Keyboard overlay** — a BAR-style visual keyboard of the current binds, toggled
+  by the backslash key or a movable on-screen **Keys** button.
+
+## Next
+
+See `docs/ROADMAP.md`. Upcoming: deeper command-queue editing, area commands,
+formations, and BAR's richer `select` filter DSL. A few features (per-unit-health
+selection, idle/queue state) may need an optional companion server mod — see the docs.
 
 ## Reference source
 
