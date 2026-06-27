@@ -39,6 +39,7 @@
       // from the top, so home/factory/category grow downward without empty space.
       var GX = 12, GY = 276, GW = 336, GH = 276;          // grid panel
       var TIPX = GX + GW + 8, TIPW = 300, TIPH = 260;     // tooltip panel (to the right)
+      var TIPY = GY + GH - 228;                            // align tip's bottom with the grid box's bottom
 
       // grid keys in VISUAL reading order (top-left -> bottom-right); index = slot.
       var CAPS = ['Q','W','E','R','A','S','D','F','Z','X','C','V'];
@@ -113,16 +114,15 @@
         return 4;
       }
       function isGenerator(entry) { return /(metal_extractor|energy_plant|metal_maker)/.test(String(buildIdOf(entry))); }
-      // quick-access generators: prefer the advanced variant — drop the basic when an
-      // advanced of the same family is also buildable (advanced fabbers show the adv one).
-      function quickGenerators(eco) {
-        var gens = [], hasAdv = {}, i, id;
-        for (i = 0; i < eco.length; i++) if (isGenerator(eco[i])) gens.push(eco[i]);
-        for (i = 0; i < gens.length; i++) { id = String(buildIdOf(gens[i])); if (/_adv/.test(id)) hasAdv[id.replace(/_adv/g, '')] = true; }
+      // prefer the advanced variant — drop the basic when an advanced of the same family
+      // is also buildable (advanced fabbers list both tiers; quick access shows only adv).
+      function dedupAdv(list) {
+        var hasAdv = {}, i, id;
+        for (i = 0; i < list.length; i++) { id = String(buildIdOf(list[i])); if (/_adv/.test(id)) hasAdv[id.replace(/_adv/g, '')] = true; }
         var out = [];
-        for (i = 0; i < gens.length; i++) {
-          id = String(buildIdOf(gens[i]));
-          if (/_adv/.test(id) || !hasAdv[id.replace(/_adv/g, '')]) out.push(gens[i]);
+        for (i = 0; i < list.length; i++) {
+          id = String(buildIdOf(list[i]));
+          if (/_adv/.test(id) || !hasAdv[id.replace(/_adv/g, '')]) out.push(list[i]);
         }
         return out;
       }
@@ -203,10 +203,13 @@
             if (!cl.length) continue;
             cells[8 + cat] = { specId: null, isCategory: true, catLabel: CAT_LABELS[cat], catCount: cl.length, icon: CAT_ICONS[cat] };
           }
-          // top 8 = quick access: economy generators (metal, energy; advanced preferred),
-          // then combat, then utility
-          var quick = quickGenerators(grid.cats[0] || []).concat(grid.cats[1] || [], grid.cats[2] || []);
-          for (var q = 0; q < QUICK_SLOTS.length && q < quick.length; q++) put(QUICK_SLOTS[q], quick[q]);
+          // top 8 = quick access: economy generators (metal, energy), then combat, then
+          // utility — advanced preferred (basic dropped when adv buildable). CLICK-ONLY
+          // (noCap): these keys stay free for commander actions; only categories are hotkeyed.
+          var gens = [], eco = grid.cats[0] || [];
+          for (var g0 = 0; g0 < eco.length; g0++) if (isGenerator(eco[g0])) gens.push(eco[g0]);
+          var quick = dedupAdv(gens.concat(grid.cats[1] || [], grid.cats[2] || []));
+          for (var q = 0; q < QUICK_SLOTS.length && q < quick.length; q++) put(QUICK_SLOTS[q], quick[q], { noCap: true });
           grid.sub = '';
 
         } else {
@@ -242,7 +245,7 @@
         if (!el || !document.getElementById(PANEL_ID))
           el = makePanel(PANEL_ID, SRC, 'position:absolute;left:' + GX + 'px;bottom:' + GY + 'px;width:' + GW + 'px;height:' + GH + 'px;z-index:1400;', false);
         if (!tipEl || !document.getElementById(TIP_ID))
-          tipEl = makePanel(TIP_ID, TIP_SRC, 'position:absolute;left:' + TIPX + 'px;bottom:' + GY + 'px;width:' + TIPW + 'px;height:' + TIPH + 'px;z-index:1400;', true);
+          tipEl = makePanel(TIP_ID, TIP_SRC, 'position:absolute;left:' + TIPX + 'px;bottom:' + TIPY + 'px;width:' + TIPW + 'px;height:' + TIPH + 'px;z-index:1400;', true);
       }
       function forceUpdate(id) { var p = api.panels[id]; if (p && p.update) { try { p.update(); } catch (e) {} } }
       function showPanel(id, on) {
@@ -353,19 +356,21 @@
       function onKeyDown(e) {
         if (!grid.open || BA.util.uiBusy()) return;
         var w = e.which;
+        var submenu = grid.isFactory || nav.category !== null;   // a factory grid or an open category
         if (w === KEY_SPACE) { if (grid.isFactory) { spaceHeld = true; consume(e); return false; } return; }
-        if (w === KEY_B) { consume(e); nextPage(); return false; }
+        if (w === KEY_B) { if (submenu) { consume(e); nextPage(); return false; } return; }   // paging only inside a build menu
         if (w === KEY_ESC) { if (!grid.isFactory && nav.category !== null) { consume(e); goHome(); return false; } return; }
         if (!isGridKey(e)) return;
-        consume(e);
         var slot = KEYCODE_TO_SLOT[w];
-        // mobile + home: Z X C V open categories; the rest are inert
-        if (!grid.isFactory && nav.category === null) {
-          if (slot >= 8) { if (!e.ctrlKey && !e.altKey) openCategory(slot - 8); return false; }  // bottom row = categories
-          var qc = grid.cells && grid.cells[slot];                                                // top 8 = quick build
-          if (qc && qc.specId) enterFab(qc.specId, e.shiftKey, e.ctrlKey);
-          return false;
+        // HOME (mobile, no category): only the bottom row (Z X C V) is hotkeyed, to open a
+        // category. The top 8 quick cells are CLICK-ONLY, so Q/W/E/R/A/S/D/F stay free for
+        // the commander's other actions while the menu is up.
+        if (!submenu) {
+          if (slot >= 8 && !e.ctrlKey && !e.altKey) { consume(e); openCategory(slot - 8); return false; }
+          return;   // pass through — quick cells are mouse-only
         }
+        // factory grid or open category: every cell is hotkeyed
+        consume(e);
         var cell = grid.cells && grid.cells[slot];
         if (!cell) return false;
         if (grid.isFactory) doBuild(cell.specId, qtyFromKeyboard(e), spaceHeld);
@@ -378,6 +383,8 @@
         if (w === KEY_SPACE) { spaceHeld = false; if (grid.isFactory) { consume(e); return false; } return; }
         if (w === KEY_SHIFT) { if (nav.category !== null) goHome(); return; }   // BAR: releasing Shift always returns home
         if (!isGridKey(e)) return;
+        // match onKeyDown: in home, quick-cell keys (top 8) pass through; only categories consume
+        if (!grid.isFactory && nav.category === null && KEYCODE_TO_SLOT[w] < 8) return;
         consume(e); return false;
       }
       document.addEventListener('keydown', onKeyDown, true);

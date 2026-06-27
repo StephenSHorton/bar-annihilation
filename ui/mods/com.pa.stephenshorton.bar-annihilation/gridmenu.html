@@ -71,7 +71,7 @@
       var inner = '';
       if (cell.icon) inner += '<img class="gm-img" src="' + esc(cell.icon) + '" />';
       else inner += '<div class="gm-name">' + esc(cell.label) + '</div>';
-      inner += '<div class="gm-cap">' + esc(cap) + '</div>';
+      if (!cell.noCap) inner += '<div class="gm-cap">' + esc(cap) + '</div>';   // quick cells are click-only
       if (cell.isCategory) {
         inner += '<div class="gm-catcount">' + cell.catCount + '</div>';
         inner += '<div class="gm-catlabel">' + esc(cell.catLabel) + '</div>';
