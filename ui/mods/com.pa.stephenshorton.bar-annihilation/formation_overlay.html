@@ -1,0 +1,74 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+  <meta locns="live_game" />
+  <noloc><title>BAR Annihilation: Formation Overlay</title></noloc>
+  <link href="bundle://boot/boot.css" rel="stylesheet" type="text/css" />
+  <script src="bundle://boot/boot.js" type="text/javascript"></script>
+  <style>
+    /* A transparent, no-input overlay VIEW. The live_game host document is
+       composited BELOW the 3D world and never paints body DOM over the holodeck,
+       so the formation preview is drawn here (a <panel> view the engine
+       composites ON TOP of the 3D, the same way PA's build_hover overlay works).
+       This view is a dumb renderer: the host pushes the normalized stroke +
+       per-unit slots via panel.message('form.draw'/'form.clear'). */
+    html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; background:transparent !important; }
+    #fc { position:absolute; left:0; top:0; width:100%; height:100%; display:block; }
+  </style>
+</head>
+<body>
+  <canvas id="fc"></canvas>
+  <script type="text/javascript">
+    var model = {};
+    var handlers = {};
+    var cv = null, ctx = null, last = null;
+
+    function size() {
+      if (!cv) return;
+      var w = window.innerWidth || 1920, h = window.innerHeight || 1080;
+      if (cv.width !== w) cv.width = w;
+      if (cv.height !== h) cv.height = h;
+    }
+    function clear() { if (ctx) ctx.clearRect(0, 0, cv.width, cv.height); }
+
+    // payload = { stroke:[[nx,ny],...], slots:[[nx,ny],...], color:'#rrggbb' }
+    // coords are normalized 0..1 (resolution-independent); we scale by canvas size.
+    function draw(p) {
+      if (!ctx) return;
+      size();
+      var W = cv.width, H = cv.height;
+      ctx.clearRect(0, 0, W, H);
+      if (!p) return;
+      var col = p.color || '#6ef06e';
+      var stroke = p.stroke || [], slots = p.slots || [], i;
+
+      if (stroke.length >= 2) {                      // the drawn path
+        ctx.lineWidth = 2.5; ctx.strokeStyle = col; ctx.globalAlpha = 0.55;
+        ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(stroke[0][0] * W, stroke[0][1] * H);
+        for (i = 1; i < stroke.length; i++) ctx.lineTo(stroke[i][0] * W, stroke[i][1] * H);
+        ctx.stroke(); ctx.globalAlpha = 1;
+      }
+      for (i = 0; i < slots.length; i++) {           // one marker per unit, spread along the path
+        var x = slots[i][0] * W, y = slots[i][1] * H;
+        ctx.beginPath(); ctx.arc(x, y, 6, 0, Math.PI * 2);
+        ctx.globalAlpha = 0.95; ctx.fillStyle = col; ctx.fill();
+        ctx.globalAlpha = 1; ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(0,0,0,0.7)'; ctx.stroke();
+        ctx.beginPath(); ctx.arc(x, y, 2, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.fill();
+      }
+    }
+
+    $(document).ready(function () {
+      cv = document.getElementById('fc');
+      ctx = cv ? cv.getContext('2d') : null;
+      size();
+      window.addEventListener('resize', function () { size(); if (last) draw(last); });
+      handlers['form.draw'] = function (payload) { last = payload; draw(payload); };
+      handlers['form.clear'] = function () { last = null; clear(); };
+      app.registerWithCoherent(model, handlers);
+    });
+  </script>
+</body>
+</html>
