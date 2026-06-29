@@ -19,7 +19,8 @@
       "coui://ui/mods/com.pa.stephenshorton.bar-annihilation/modules/selection-binds.js",
       "coui://ui/mods/com.pa.stephenshorton.bar-annihilation/modules/overlay.js",
       "coui://ui/mods/com.pa.stephenshorton.bar-annihilation/modules/gridmenu.js",
-      "coui://ui/mods/com.pa.stephenshorton.bar-annihilation/modules/formations.js"
+      "coui://ui/mods/com.pa.stephenshorton.bar-annihilation/modules/formations.js",
+      "coui://ui/mods/com.pa.stephenshorton.bar-annihilation/modules/build-probe.js"
     ],
     "live_game_action_bar": [
       "coui://ui/mods/com.pa.stephenshorton.bar-annihilation/modules/actionbar-tooltips.js"
