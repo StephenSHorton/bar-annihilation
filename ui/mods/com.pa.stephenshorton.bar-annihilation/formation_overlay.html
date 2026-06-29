@@ -32,25 +32,36 @@
     }
     function clear() { if (ctx) ctx.clearRect(0, 0, cv.width, cv.height); }
 
+    // Dev diagnostic: flip to true to draw the overlay's real repaint rate top-left.
+    var SHOW_FPS = false;
+    var frames = 0, fpsT0 = 0, fps = 0;
+
     // payload = { stroke:[[nx,ny],...], slots:[[nx,ny],...], color:'#rrggbb' }
     // coords are normalized 0..1 (resolution-independent); we scale by canvas size.
     function draw(p) {
       if (!ctx) return;
       size();
       var W = cv.width, H = cv.height;
-      ctx.clearRect(0, 0, W, H);
+      ctx.clearRect(0, 0, W, H);                      // full clear each frame — the smooth path here
       if (!p) return;
       var col = p.color || '#6ef06e';
       var stroke = p.stroke || [], slots = p.slots || [], i;
 
-      if (stroke.length >= 2) {                      // the drawn path
+      if (SHOW_FPS) {
+        var now = Date.now(); frames++;
+        if (now - fpsT0 >= 500) { fps = Math.round(frames * 1000 / (now - fpsT0)); frames = 0; fpsT0 = now; }
+        ctx.globalAlpha = 1; ctx.font = '22px monospace'; ctx.fillStyle = '#ffea00';
+        ctx.fillText('overlay fps: ' + fps, 28, 44);
+      }
+
+      if (stroke.length >= 2) {                       // the drawn path
         ctx.lineWidth = 2.5; ctx.strokeStyle = col; ctx.globalAlpha = 0.55;
         ctx.lineJoin = 'round'; ctx.lineCap = 'round';
         ctx.beginPath(); ctx.moveTo(stroke[0][0] * W, stroke[0][1] * H);
         for (i = 1; i < stroke.length; i++) ctx.lineTo(stroke[i][0] * W, stroke[i][1] * H);
         ctx.stroke(); ctx.globalAlpha = 1;
       }
-      for (i = 0; i < slots.length; i++) {           // one marker per unit, spread along the path
+      for (i = 0; i < slots.length; i++) {            // one marker per unit, spread along the path
         var x = slots[i][0] * W, y = slots[i][1] * H;
         ctx.beginPath(); ctx.arc(x, y, 6, 0, Math.PI * 2);
         ctx.globalAlpha = 0.95; ctx.fillStyle = col; ctx.fill();

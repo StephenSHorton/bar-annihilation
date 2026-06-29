@@ -33,17 +33,21 @@
           var cur = null;
           try { if (api.settings.value) cur = api.settings.value('ui', 'show_orders'); } catch (e) {}
           if (cur === 'NEVER') { BA.log('display-defaults: show_orders=NEVER (your choice) — leaving as-is'); return; }
-          if (cur !== 'ALWAYS') api.settings.set('ui', 'show_orders', 'ALWAYS');
-          // set() ONLY updates the stored value + observable — it does NOT push to
-          // the engine (that's why the lines didn't change live). apply(['ui'])
-          // re-emits the full display-settings object (game.updateDisplaySettings)
-          // from current values, so it takes effect THIS session without clobbering
-          // your other display prefs (icons, stat bars, build previews, ...). We
-          // call it every launch (idempotent — re-emits current values, no inputmap
-          // reload for the 'ui' group) so the engine flag is guaranteed set even if
-          // the stored value was already ALWAYS but PA's startup apply missed it.
+          var changed = [];
+          if (cur !== 'ALWAYS') { api.settings.set('ui', 'show_orders', 'ALWAYS'); changed.push('show_orders ' + cur + '->ALWAYS'); }
+          // order_behavior: SELECTED = draw order lines only for the SELECTED units.
+          // PA's default is SELECTED_OR_ALL, which also draws EVERY unit's queue when
+          // nothing is selected (the clutter the user didn't want).
+          var ob = null;
+          try { if (api.settings.value) ob = api.settings.value('ui', 'order_behavior'); } catch (e) {}
+          if (ob !== 'SELECTED') { api.settings.set('ui', 'order_behavior', 'SELECTED'); changed.push('order_behavior ' + ob + '->SELECTED'); }
+          // set() ONLY updates the stored value + observable — it does NOT push to the
+          // engine. apply(['ui']) re-emits the full display-settings object
+          // (game.updateDisplaySettings) from current values, so it takes effect THIS
+          // session without clobbering your other display prefs, and without reloading
+          // the inputmap (we pass only the 'ui' group). Idempotent — safe every launch.
           if (api.settings.apply) api.settings.apply(['ui']);
-          BA.log('display-defaults: show_orders ' + cur + ' -> ALWAYS + applied to engine (order queues now persist without Shift)');
+          BA.log('display-defaults: ' + (changed.length ? changed.join(', ') : 'already set') + ' + applied to engine');
         } catch (e) { BA.err('display-defaults: failed to set show_orders', e); }
       }, 1200);
     }

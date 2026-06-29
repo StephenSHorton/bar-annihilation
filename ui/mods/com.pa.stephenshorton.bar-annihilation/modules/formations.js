@@ -90,7 +90,12 @@
       var PANEL_ID = 'barann-formation-overlay';
       var PANEL_SRC = 'coui://ui/mods/com.pa.stephenshorton.bar-annihilation/formation_overlay.html';
       function ensureFormPanel() {
-        if (document.getElementById(PANEL_ID)) return;
+        // Recreate (not reuse) so the panel's HTML reloads. The live_game document
+        // persists across Ctrl+Shift+R, so a reused panel keeps its ORIGINAL HTML —
+        // every formation_overlay.html edit silently required a full PA restart to
+        // take effect. Removing + recreating makes panel-side edits load on reload.
+        var old = document.getElementById(PANEL_ID);
+        if (old && old.parentNode) { try { old.parentNode.removeChild(old); } catch (e) {} }
         try {
           var p = document.createElement('panel');
           p.id = PANEL_ID;
@@ -115,17 +120,23 @@
         return '#6ef06e';                                                          // move/default = green
       }
 
-      // HARD time-throttle on the WHOLE preview (~45/sec max). A gaming mouse fires
-      // mousemove hundreds-to-1000x/sec; recomputing the per-unit spread (resample
-      // over the whole path × selection size) AND pushing a full panel redraw on
-      // every move floods Coherent — and it scales with unit count, so it bit hard
-      // at 105 units. The earlier version only throttled the SEND; the compute still
-      // ran per move. Now we gate the entire compute on wall-clock, keep only the
-      // latest drag, and guarantee a trailing frame so the final shape isn't dropped.
-      // (Not requestAnimationFrame — it wasn't reliably coalescing in this scene.)
-      var FRAME_MS = 22;          // ~45 fps; plenty smooth for a preview, much lighter
-      var MARKER_MAX = 64;        // cap preview dots (orders still go to ALL units; >64 dots just overlap)
-      var lastFrame = 0, frameTimer = null, frameArg = null;
+      // Coalesce previews to ONE repaint per display frame. A gaming mouse fires
+      // mousemove hundreds-to-1000x/sec; recomputing the per-unit spread + pushing a
+      // panel redraw on every move would flood the overlay view. requestAnimationFrame
+      // collapses that to the display's refresh rate (latest drag wins), which is what
+      // made the original preview track the cursor smoothly. (The in-panel FPS counter
+      // verifies the overlay's real repaint rate.) Wall-clock setTimeout is the
+      // fallback only if rAF is somehow unavailable in this scene.
+      var PREVIEW_ON = true;      // live preview on
+      var FRAME_MS = 16;          // wall-clock fallback cap (~60fps) if requestAnimationFrame is unavailable
+      var MARKER_MAX = 48;        // cap preview dots (orders still go to ALL units; >48 dots just overlap)
+      // Coalesce to ONE repaint per DISPLAY frame (requestAnimationFrame) so the line
+      // tracks the cursor tightly. A slow wall-clock cap (we were at ~30fps) makes the
+      // preview visibly TRAIL the cursor — the "laggy spline". The game itself is never
+      // the bottleneck; only how promptly this separate overlay view repaints.
+      var RAF = (typeof window !== 'undefined' && window.requestAnimationFrame) ? function (f) { return window.requestAnimationFrame(f); } : null;
+      var rafPending = false, lastFrame = 0, frameTimer = null, frameArg = null;
+      function flush() { rafPending = false; frameTimer = null; if (frameArg) paintNow(frameArg); }
       function paintNow(d) {
         lastFrame = Date.now();
         if (!d || !d.moved || d.path.length < 2) { panelMsg('form.clear', {}); return; }
@@ -140,14 +151,16 @@
         }
         panelMsg('form.draw', { stroke: stroke, slots: slots, color: verbColor(d.armed) });
       }
-      function drawPreview(d) {                            // throttles the COMPUTE, not just the send
+      function drawPreview(d) {                            // coalesce per display frame; latest data wins
+        if (!PREVIEW_ON) return;
         frameArg = d;
-        var dt = Date.now() - lastFrame;
-        if (dt >= FRAME_MS) { if (frameTimer) { clearTimeout(frameTimer); frameTimer = null; } paintNow(d); }
-        else if (!frameTimer) { frameTimer = setTimeout(function () { frameTimer = null; if (frameArg) paintNow(frameArg); }, FRAME_MS - dt); }
+        if (RAF) { if (!rafPending) { rafPending = true; RAF(flush); } return; }
+        var dt = Date.now() - lastFrame;                   // fallback: ~60fps wall-clock
+        if (dt >= FRAME_MS) { if (frameTimer) { clearTimeout(frameTimer); frameTimer = null; } flush(); }
+        else if (!frameTimer) { frameTimer = setTimeout(flush, FRAME_MS - dt); }
       }
       function clearPreview() {
-        frameArg = null;
+        frameArg = null; rafPending = false;
         if (frameTimer) { clearTimeout(frameTimer); frameTimer = null; }
         panelMsg('form.clear', {}); lastFrame = Date.now();   // immediate clear on release/esc
       }
@@ -194,6 +207,16 @@
         var armed = d.armed, verb = sendVerb(armed);
         if (ids.length < MIN_UNITS) {                     // 0/1 unit -> single command to the end point
           if (ids.length && h.unitCommand) { var ep = px(d.x1, d.y1); h.unitCommand(armed || 'move', ep[0], ep[1], d.queue); disarm(); }
+          return;
+        }
+        // Only formation-eligible verbs spread along the line (BAR: move/fight/attack/
+        // patrol/unload). reclaim/repair/guard/etc. aren't formations — their AREA
+        // variant is a LEFT-drag (PA-native), so a right-drag with one of those just
+        // issues that command once at the release point.
+        var ELIGIBLE = { '': 1, move: 1, attack_ground: 1, patrol: 1, unload: 1 };
+        if (!ELIGIBLE[verb] && h.unitCommand) {
+          var np = px(d.x1, d.y1); h.unitCommand(armed, np[0], np[1], d.queue); disarm();
+          log('non-formation verb "' + armed + '" -> single command (area variant = left-drag)');
           return;
         }
         var w = wv(); if (!w || !w.sendOrder) { log('sendOrder unavailable'); return; }
@@ -262,10 +285,26 @@
         }
       }
 
+      function onEsc(e) { if (e.keyCode === 27 || e.which === 27) { if (drag) { drag = null; clearPreview(); } } }
+
+      // IDEMPOTENCY — critical for the Ctrl+Shift+R dev loop. A scene reload re-runs
+      // this module, but the live_game document PERSISTS, so our capture-phase
+      // document listeners would STACK (each reload adds another full set; every
+      // mousemove then runs through N copies -> the "laggy even at 2 units" cliff).
+      // Tear down the prior load's listeners (refs stashed on window) before adding
+      // ours. No-op on a truly fresh document (window is fresh, nothing to clean).
+      if (window.__barFormCleanup) { try { window.__barFormCleanup(); } catch (e) {} }
       document.addEventListener('mousedown', onDown, true);
       document.addEventListener('mousemove', onMove, true);
       document.addEventListener('mouseup', onUp, true);
-      document.addEventListener('keydown', function (e) { if (drag && (e.keyCode === 27 || e.which === 27)) { drag = null; clearPreview(); } }, true);
+      document.addEventListener('keydown', onEsc, true);
+      window.__barFormCleanup = function () {
+        document.removeEventListener('mousedown', onDown, true);
+        document.removeEventListener('mousemove', onMove, true);
+        document.removeEventListener('mouseup', onUp, true);
+        document.removeEventListener('keydown', onEsc, true);
+        try { if (frameTimer) clearTimeout(frameTimer); } catch (e) {}
+      };
 
       log('formations ready (freehand preview + per-unit formation) — right-DRAG = per-unit formation w/ on-screen markers; right-CLICK = armed cmd / smart; native custom-formations OFF');
     }

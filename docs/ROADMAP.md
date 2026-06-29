@@ -12,14 +12,17 @@ engine support, may not port.
 
 ---
 
-## Current status — v0.0.1 released (2026-06-27)
+## Current status — v0.0.4 released (2026-06-28)
 
-First public release is out (GitHub Releases; the CI workflow builds + attaches the
-mod zip on a published release). **Shipped:** M0 (API verified), part of M1
-(selection power tools — several real BAR Grid binds, plus the keyboard overlay now
-toggled by a movable on-screen **Keys** button), and **M3 (grid build menu)**.
-**In progress:** M1 (the faithful `select` DSL tiers). **Next up:** M4 build
-placement, then M5 area commands / M6 formations.
+Releases ship via GitHub Releases (the CI workflow builds + attaches the mod zip on a
+published release). **Shipped:** M0 (API verified), part of M1 (selection power tools —
+several real BAR Grid binds, plus the keyboard overlay toggled by a movable on-screen
+**Keys** button), **M3 (grid build menu)**, **M6 (formations** — freehand right-drag
+with a live per-unit preview overlay + non-crossing assignment, v0.0.3), and **M5 (area
+commands** — PA-native arm + left-drag; the mod ensures right-drag formations don't
+hijack them, v0.0.4). Also shipped: persistent order/queue lines (selection-scoped).
+**In progress:** M1 (the faithful `select` DSL tiers). **Next up:** M4 build placement,
+then M7 (unit states & set-target).
 
 ---
 
@@ -86,13 +89,17 @@ Build-spacing modifier + persistent spacing, line build (drag a row), area build
 (radius drag → many of one building). World-space drag handler emitting batched
 positioned build orders.
 
-## M5 — Area commands  *(b)*
-Radius-drag reclaim / repair / capture / area-attack / area-unload, plus the
-Alt/Ctrl target filters and smart-area-reclaim. Reuses M4's drag handler.
+## M5 — Area commands  *(b)*  ✅ v0.0.4
+Radius-drag reclaim / repair / capture / area-attack / area-unload are **PA-native**:
+the engine enters area mode when a command is armed (our cmd-mode keys) and you
+LMB-drag. The mod's job here is non-interference — the right-drag formation handler
+has an eligibility gate so non-formation verbs fall through to PA's native area path
+instead of being hijacked. (Alt/Ctrl target filters + smart-area-reclaim: future.)
 
-## M6 — Formations  *(b)*
-CustomFormations2: right-drag line/arc with even distribution, then freehand
-path with assignment. Formation rendering overlay.
+## M6 — Formations  *(b)*  ✅ v0.0.3
+CustomFormations2 port: freehand right-drag path with arc-length resample + even
+distribution, per-unit `worldview.sendOrder`, GetOrdersNoX non-crossing assignment,
+and a live formation overlay (no-input panel composited over the 3D, rAF-repainted).
 
 ## M7 — Unit states & set-target  *(a / d)*
 Fire/move states, on/off, repeat, **set-target** persistent priority, default
