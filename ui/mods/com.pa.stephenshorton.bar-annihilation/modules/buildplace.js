@@ -203,6 +203,7 @@
         // the first move. Lost-mouseup recovery is handled by onDown stale-clear +
         // blur/mouseleave instead.
         drag.x1 = e.clientX; drag.y1 = e.clientY;
+        drag.mode = e.altKey ? 'grid' : 'line';          // BAR re-evaluates the mode LIVE during the drag
         var dx = drag.x1 - drag.x0, dy = drag.y1 - drag.y0;
         if (!drag.moved && (dx * dx + dy * dy) >= DRAG_PX * DRAG_PX) drag.moved = true;
         drawPreview(drag);
@@ -214,6 +215,7 @@
         e.preventDefault(); e.stopImmediatePropagation();
         var d = drag;
         d.x1 = e.clientX; d.y1 = e.clientY;                        // mouseup is the authoritative end point
+        d.mode = e.altKey ? 'grid' : 'line';                       // honor the modifier state at release
         var dx = d.x1 - d.x0, dy = d.y1 - d.y0;
         if (!d.moved && (dx * dx + dy * dy) >= DRAG_PX * DRAG_PX) d.moved = true;
         var stillShift = e.shiftKey;
@@ -227,6 +229,14 @@
         // Cancel an in-progress line; do NOT consume the event so PA's native Esc
         // still exits fab mode (BAR: Esc = get out).
         if ((e.keyCode === 27 || e.which === 27) && drag) endDrag();
+      }
+      // Switch line<->grid live when Alt is pressed/released mid-drag with the mouse
+      // stationary (mousemove already handles it while moving). Observe only — never
+      // consume, so Alt stays available to PA/other binds.
+      function onMod(e) {
+        if (!drag) return;
+        var m = e.altKey ? 'grid' : 'line';
+        if (m !== drag.mode) { drag.mode = m; if (drag.moved) drawPreview(drag); }
       }
 
       // Recovery: a mouseup lost off-window/on blur would strand drag. Clear it.
@@ -346,6 +356,8 @@
       document.addEventListener('mousemove', onMove, true);
       document.addEventListener('mouseup', onUp, true);
       document.addEventListener('keydown', onEsc, true);
+      document.addEventListener('keydown', onMod, true);
+      document.addEventListener('keyup', onMod, true);
       window.addEventListener('blur', onBlur, true);
       document.addEventListener('mouseleave', onLeave, true);
       window.__barBuildplaceCleanup = function () {
@@ -353,13 +365,15 @@
         document.removeEventListener('mousemove', onMove, true);
         document.removeEventListener('mouseup', onUp, true);
         document.removeEventListener('keydown', onEsc, true);
+        document.removeEventListener('keydown', onMod, true);
+        document.removeEventListener('keyup', onMod, true);
         window.removeEventListener('blur', onBlur, true);
         document.removeEventListener('mouseleave', onLeave, true);
         try { if (frameTimer) clearTimeout(frameTimer); } catch (e) {}
         window.__barLineDragging = false;
       };
 
-      log('buildplace ready (v4) — Shift+drag = LINE, Shift+Alt+drag = GRID; plain click = native single placement');
+      log('buildplace ready (v5) — Shift+drag = LINE, +Alt = GRID (toggles live mid-drag); plain click = native single placement');
     }
   });
 })();
