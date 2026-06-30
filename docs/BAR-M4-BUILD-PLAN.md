@@ -118,15 +118,23 @@ synthesized screen coords per position (messier, screen-space) — but prove `se
    Alt) so Alt+Z/X reach buildplace in every menu state. Transient "Spacing N" DOM
    readout. Gotcha fixed: a 240px ghost-spacing cap had pinned the preview flat. (Not yet
    wired: mouse4/5 alt, BA.binds publish — defer.)
-6. **Facing keys + native-drag-rotate suppression + polish** — port BAR's facing rotate
-   keys (buildFacingHandler; 0–3, applied as the shared begin→end fab vector). **DECISION
-   (deferred, 2026-06-29):** PA's stock left-DRAG = rotate-facing-then-place-one; we
-   currently leave plain left-drag fully native (only Shift+drag is ours). When the
-   facing keys land, SUPPRESS PA's native left-drag-rotate at the SAME TIME (so the user
-   never loses the ability to rotate a single building) — i.e. only then does buildplace
-   claim plain left presses for a no-rotate single placement, facing via keys. Do NOT
-   suppress it before the keys exist. Also: Esc cancels (done); bump modinfo; de-list
-   build-probe.js; ROADMAP M4 → DONE.
+6. ✅ **Facing keys + native-drag-rotate suppression + polish** (2026-06-30) — ported BAR's
+   `buildfacing` (grid_keys.txt:15-18: `[` = inc, `]` = dec; facing int 0..3 = S/E/N/W,
+   cycles, sticky + persisted in localStorage). Applied via 4 fixed cardinal begin→end fab
+   vectors (`faceVecFor`) to single **and** line/grid uniformly (BAR: drag-builds share the
+   current facing — replaced the old endpoint-derived line facing, a non-faithful stopgap).
+   **Native left-drag-rotate REPLACED** (user-approved 2026-06-30, faithful: BAR has only
+   discrete facing): the capture-phase `onDown` now claims ALL left presses while a build is
+   armed (`armedSpec()` truthy — the load-bearing guard; when disarmed, clicks reach PA
+   untouched). Plain left = single at facing; `placeSingle` queue semantics fixed to mirror
+   native `enterQueueMode(shiftKey)` (Shift=append+stay armed, none=replace+endFabMode) and
+   restored native's confirm sound + marker so the swap isn't a feel regression. Preview
+   draws a facing tick per ghost; transient "Facing: S/E/N/W" toast. Esc cancels (done);
+   modinfo → 0.0.5 (2026-06-30); `build-probe.js` de-listed from scenes; `DBG` block removed.
+   **CONSTRAINTS (faithful degrade, not bugs):** facing is SCREEN/camera-relative (PA exposes
+   no world→screen projection); PA's pre-click hover GHOST still shows default orientation
+   (we don't control it) so asymmetric buildings "snap" to the [ / ] facing on placement —
+   the toast + the placed building are authoritative.
 
 ## Risks / walls (degrade faithfully, never fake)
 - **Gate risk:** `command:'build'` unexercised via sendOrder — Phase 0 proves it.

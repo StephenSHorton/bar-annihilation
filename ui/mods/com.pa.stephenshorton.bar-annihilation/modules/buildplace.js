@@ -3,34 +3,40 @@
   var BA = window.BarAnnihilation; if (!BA) { return; }
 
   // ---------------------------------------------------------------------------
-  // BUILDPLACE — BAR-style LINE build (Phase 1 of M4).
+  // BUILDPLACE — BAR-style build placement (M4).
   //
-  // Claims SHIFT + left-DRAG on the holodeck WHILE A BUILD IS ARMED and lays a
-  // row of that building evenly along the drag, all sharing one facing. This is
-  // BAR's exact gesture mapping (gui_pregame_build.lua determineBuildMode:504):
-  //   shift + drag, no alt/ctrl = LINE  (alt = GRID, alt+ctrl = BOX, ctrl = AROUND
-  //   are RESERVED for later phases — we claim ONLY plain shift).
+  // While a build is ARMED, claims left presses on the holodeck and maps BAR's
+  // gesture grammar (gui_pregame_build.lua determineBuildMode:504):
+  //   no shift           = SINGLE  (placed at the [ / ] facing; Phase 6)
+  //   shift + drag       = LINE
+  //   shift + alt + drag = GRID/area
+  //   (ctrl reserved; ctrl+drag = AROUND, alt+ctrl = BOX are future phases)
+  // Line/grid lay a row/field of the building evenly along the drag, all sharing
+  // the SAME facing (BAR: drag-builds never auto-rotate per position).
   //
   // Placement rides the PROVEN engine (build-probe B6): the NATIVE screen-coord
   // fab path holodeck.unitBeginFab/unitEndFab(snap=true) — the engine raycasts the
   // screen point, derives the upright surface orient, and grid-snaps. (sendOrder
-  // 'build' was rejected: it builds tilted AND teleports the fabber.) Spacing comes
-  // from the unit's real placement_size + area_build_separation, fetched from the
-  // on-disk spec (model.unitSpecs is stripped). World spacing without a projection
-  // fn: dense-raycast the screen segment ONCE -> world polyline -> walk arc-length
-  // by step -> lerp back to screen samples -> fab loop.
+  // 'build' was rejected: it builds tilted AND teleports the fabber.) Orientation
+  // is the begin->end screen vector (continuous); we feed 4 fixed cardinal offsets
+  // to quantize to BAR's 4 facings. Spacing comes from the unit's real
+  // placement_size + area_build_separation, fetched from the on-disk spec
+  // (model.unitSpecs is stripped). World spacing without a projection fn:
+  // dense-raycast the screen segment ONCE -> world polyline -> walk arc-length by
+  // step -> lerp back to screen samples -> fab loop.
   //
   // CAPTURE SEAM: a document CAPTURE-phase mousedown fires before PA's bubble-phase
   // 'mousedown.stock'; when our predicate holds we stopImmediatePropagation so PA
-  // never starts its own fab_rotate/input.capture for that press (PRE-EMPT). Plain
-  // (no-shift) clicks fail the predicate and reach PA untouched, so native single
-  // placement + native facing-drag are 100% preserved. We do NOT re-arm fab mode
-  // (gridmenu already armed it) — re-arming would reset fabCount.
+  // never starts its own fab/fab_rotate/input.capture for that press (PRE-EMPT).
+  // PHASE 6: while a build is armed we now claim ALL left presses (plain too) and
+  // place a single at the [ / ] facing, REPLACING PA's native continuous drag-rotate
+  // with BAR's discrete 4-cardinal facing. When NO build is armed the predicate
+  // fails and clicks reach PA untouched (select/command stay 100% native). We do
+  // NOT re-arm fab mode (gridmenu already armed it) — re-arming would reset fabCount.
   // ---------------------------------------------------------------------------
   BA.register({
     name: 'buildplace',
     init: function () {
-      var DBG = false;            // DEV: log onDown predicate inputs on left-press (flip on to diagnose)
       var DRAG_PX = 8;            // press travel (screen px) before it counts as a drag
       var SAMPLES = 60;           // dense screen samples raycast along the drag (one batch)
       var MAXN = 200;             // BAR MAX_DRAG_BUILD_COUNT cap
@@ -99,6 +105,31 @@
       }
       function stepWorld(fp, spec) { return stepOf(fp) + getSpacing(spec) * SPACING_UNIT; }
 
+      // --- build FACING (BAR buildfacing: [ = inc, ] = dec; int 0..3 cycles
+      // S/E/N/W). PA's fab orient is the begin->end screen vector (continuous); we
+      // feed 4 fixed cardinal offsets to quantize to BAR's 4 facings. SCREEN-relative
+      // (PA exposes no world->screen projection) so [ / ] rotate relative to the
+      // camera. Single global value, sticky + persisted (faithful: BAR keeps facing).
+      // Applied uniformly to single/line/grid (BAR drag-builds share one facing).
+      var FACE_LS_KEY = 'barann.buildfacing';
+      var FACE_NAME = ['S', 'E', 'N', 'W'];
+      var facing = 0;
+      try { var _fraw = (typeof window !== 'undefined' && window.localStorage) ? localStorage.getItem(FACE_LS_KEY) : null; if (_fraw != null) { var _fv = parseInt(_fraw, 10); if (_fv >= 0 && _fv <= 3) facing = _fv; } } catch (e) {}
+      function setFacing(v) {
+        facing = ((v % 4) + 4) % 4;
+        try { if (typeof window !== 'undefined' && window.localStorage) localStorage.setItem(FACE_LS_KEY, String(facing)); } catch (e) {}
+        return facing;
+      }
+      // facing -> begin->end screen offset (FACE_PX long). 0=S(down) 1=E(right) 2=N(up) 3=W(left).
+      function faceVecFor(f) {
+        switch (((f % 4) + 4) % 4) {
+          case 1: return [FACE_PX, 0];
+          case 2: return [0, -FACE_PX];
+          case 3: return [-FACE_PX, 0];
+          default: return [0, FACE_PX];
+        }
+      }
+
       // --- live preview overlay (no-input <panel> composited ON TOP of the 3D;
       // the live_game host doc paints BELOW the world). Same pattern as formations.
       var PANEL_ID = 'barann-buildplace-overlay';
@@ -141,18 +172,20 @@
         // screen, and a 240px cap pinned the spacing flat so the spacing modifier looked
         // dead. Floor keeps the draw loop from stalling; MAXN bounds the count.
         var ghostPx = (d.step && d.wpp) ? Math.max(6, d.step / (d.wpp * uiScale())) : GHOST_DEFAULT_PX;
+        // normalized screen facing tick (same screen-space [ / ] vector the engine uses)
+        var fvv = faceVecFor(facing), fll = Math.sqrt(fvv[0] * fvv[0] + fvv[1] * fvv[1]) || 1, face = [fvv[0] / fll, fvv[1] / fll];
         var ghosts = [], guard = 0;
         if (d.mode === 'grid') {                                    // box of ghosts filling the drag rectangle
           var gx0 = Math.min(d.x0, d.x1), gx1 = Math.max(d.x0, d.x1), gy0 = Math.min(d.y0, d.y1), gy1 = Math.max(d.y0, d.y1), yy, xx;
           for (yy = gy0; yy <= gy1 && guard < MAXN; yy += ghostPx) {
             for (xx = gx0; xx <= gx1 && guard < MAXN; xx += ghostPx, guard++) ghosts.push([xx / W, yy / H]);
           }
-          panelMsg('build.draw', { stroke: [], ghosts: ghosts, color: '#6ef06e' });
+          panelMsg('build.draw', { stroke: [], ghosts: ghosts, face: face, color: '#6ef06e' });
         } else {                                                    // line: stroke + ghosts along the drag
           var dx = d.x1 - d.x0, dy = d.y1 - d.y0, len = Math.sqrt(dx * dx + dy * dy) || 1;
           var ux = dx / len, uy = dy / len, dpx = 0;
           for (dpx = 0; dpx <= len && guard < MAXN; dpx += ghostPx, guard++) ghosts.push([(d.x0 + ux * dpx) / W, (d.y0 + uy * dpx) / H]);
-          panelMsg('build.draw', { stroke: [[d.x0 / W, d.y0 / H], [d.x1 / W, d.y1 / H]], ghosts: ghosts, color: '#6ef06e' });
+          panelMsg('build.draw', { stroke: [[d.x0 / W, d.y0 / H], [d.x1 / W, d.y1 / H]], ghosts: ghosts, face: face, color: '#6ef06e' });
         }
       }
       function drawPreview(d) {
@@ -196,16 +229,16 @@
         // During an in-flight commit, fab is still armed; block a stray left press on
         // the holodeck so PA can't start a concurrent native fab and corrupt fab state.
         if (placing) { if (e.button === 0 && onHolodeck(e.target)) { e.preventDefault(); e.stopImmediatePropagation(); } return; }
-        if (DBG && e.button === 0 && onHolodeck(e.target)) {
-          try { log('onDown L shift=' + !!e.shiftKey + ' alt=' + !!e.altKey + ' ctrl=' + !!e.ctrlKey + ' mode=' + ((typeof model !== 'undefined' && model && model.mode) ? model.mode() : '?') + ' csid=' + ((typeof model !== 'undefined' && model && model.currentBuildStructureId) ? model.currentBuildStructureId() : '?') + ' selMobile=' + ((typeof model !== 'undefined' && model && model.selectedMobile) ? model.selectedMobile() : '?') + ' armed=' + armedSpec()); } catch (dbg) { log('onDown dbg threw ' + dbg); }
-        }
-        if (e.button !== 0 || !e.shiftKey || e.ctrlKey) return;    // BAR: shift+drag (no ctrl); ctrl reserved for AROUND/BOX
+        if (e.button !== 0 || e.ctrlKey) return;                   // left button only; ctrl reserved (PA no-snap) -> stays native
         if (!onHolodeck(e.target)) return;
         if (BA.util.uiBusy && BA.util.uiBusy()) return;
         var spec = armedSpec(); if (!spec) return;                 // only when a build is armed
-        e.preventDefault(); e.stopImmediatePropagation();          // PRE-EMPT PA's native fab for this press
-        // BAR determineBuildMode: shift+alt = GRID, shift alone = LINE.
-        drag = { spec: spec, mode: e.altKey ? 'grid' : 'line', dropped: false, x0: e.clientX, y0: e.clientY, x1: e.clientX, y1: e.clientY, moved: false, step: 0, wpp: 0 };
+        e.preventDefault(); e.stopImmediatePropagation();          // PRE-EMPT PA's native fab/drag-rotate for this press (Phase 6: plain left too)
+        // BAR determineBuildMode: shift+alt = GRID, shift = LINE, no shift = SINGLE
+        // (placed at the [ / ] facing — replaces PA's native left-drag-rotate).
+        // plain starts 'dropped' so it stays SINGLE even if Shift is pressed mid-drag.
+        var plain = !e.shiftKey;
+        drag = { spec: spec, mode: plain ? 'single' : (e.altKey ? 'grid' : 'line'), dropped: plain, x0: e.clientX, y0: e.clientY, x1: e.clientX, y1: e.clientY, moved: false, step: 0, wpp: 0 };
         var dref = drag;                                           // identity guard for the async callbacks below
         window.__barLineDragging = true;
         // prefetch footprint (so step is ready by mouseup) ...
@@ -281,13 +314,41 @@
         log('spacing[' + spec + '] = ' + v);
       }
 
+      // BAR buildfacing (grid_keys.txt:15-18): [ = inc, ] = dec; Shift variants too.
+      // int 0..3 cycles S/E/N/W, sticky + persisted. Only consumed while a build is
+      // armed (else [ / ] pass through to PA/other binds). Works armed AND live mid
+      // line/grid drag (refreshes the preview facing ticks).
+      function onFace(e) {
+        if (e.ctrlKey || e.altKey) return;                                                  // BAR binds plain + Shift only
+        var code = e.which || e.keyCode, dir = (code === 219) ? 1 : (code === 221) ? -1 : 0;  // [=inc  ]=dec
+        if (!dir) return;
+        if (!armedSpec()) return;
+        e.preventDefault(); e.stopImmediatePropagation();
+        var v = setFacing(facing + dir);
+        if (drag && drag.moved && drag.mode !== 'single') drawPreview(drag);                 // refresh line/grid facing ticks
+        panelMsg('build.flash', { text: 'Facing: ' + FACE_NAME[v] });
+        log('facing = ' + v + ' (' + FACE_NAME[v] + ')');
+      }
+
       // Recovery: a mouseup lost off-window/on blur would strand drag. Clear it.
       function onBlur() { if (drag) endDrag(); }
       function onLeave(e) { if (drag && (e.target === document || e.relatedTarget === null)) endDrag(); }
 
       // --- placement (the proven build-probe engine, no re-arm) -------------------
+      // Single placement at the current [ / ] facing. Queue semantics mirror PA's
+      // native fab mouseup (enterQueueMode(shiftKey)): Shift held = append + stay
+      // armed; no Shift = replace + exit fab mode. (Was: queue hard-true, which let
+      // a no-Shift single wrongly append before exiting.) Confirm sound + marker
+      // mirror native (live_game.js:3192-3197) so replacing native click-place keeps
+      // the same feedback.
       function placeSingle(h, sp, stillShift) {
-        try { h.unitBeginFab(sp[0], sp[1], true); h.unitEndFab(sp[0], sp[1], true, true); } catch (e) { log('single place threw: ' + e); }
+        var fv = faceVecFor(facing), q = !!stillShift;
+        try {
+          h.unitBeginFab(sp[0], sp[1], true);
+          var rp = h.unitEndFab(sp[0] + fv[0], sp[1] + fv[1], q, true);
+          try { h.showCommandConfirmation('', sp[0], sp[1]); } catch (e) {}
+          if (rp && rp.then) rp.then(function (ok) { if (ok) { try { api.audio.playSound('/SE/UI/UI_Building_place'); } catch (e2) {} } }, function () {});
+        } catch (e) { log('single place threw: ' + e); }
         if (!stillShift) { try { if (model.endFabMode) model.endFabMode(); } catch (e) {} }
       }
 
@@ -358,7 +419,7 @@
                   for (c = 0; c < cols; c++) { cc = (r % 2 === 0) ? c : (cols - 1 - c); placements.push([Math.round(rx0 + cc * sx), py]); }   // snake-fill
                 }
                 log('grid: ' + cols + 'x' + rows + ' = ' + placements.length + ' (step ' + step.toFixed(0) + ', spacing ' + getSpacing(d.spec) + ')');
-                placeLine(h, placements, stillShift, [FACE_PX, 0]);   // all face along the row axis
+                placeLine(h, placements, stillShift);   // all share the current [ / ] facing
               } catch (e) { log('grid then threw: ' + (e && e.message ? e.message : e)); finishCommit(stillShift); }
             }, function (err) { log('grid probe rejected: ' + err); finishCommit(stillShift); });
           } catch (e) { log('grid body threw: ' + (e && e.message ? e.message : e)); finishCommit(stillShift); }
@@ -370,18 +431,12 @@
         placing = false;
       }
 
-      function placeLine(h, placements, stillShift, faceVec) {
+      function placeLine(h, placements, stillShift) {
         if (!placements.length) { finishCommit(stillShift); return; }
-        // One shared facing for the whole batch so buildings line up (on a sphere the
-        // engine default points a different screen-way per position). faceVec wins if
-        // given (grid passes the row axis); else derive from the line's endpoints; a
-        // single placement uses default facing (0,0) to match placeSingle.
-        var faceDx = 0, faceDy = 0;
-        if (faceVec) { faceDx = faceVec[0]; faceDy = faceVec[1]; }
-        else if (placements.length >= 2) {
-          var vx = placements[placements.length - 1][0] - placements[0][0], vy = placements[placements.length - 1][1] - placements[0][1];
-          var L = Math.sqrt(vx * vx + vy * vy) || 1; faceDx = Math.round(vx / L * FACE_PX); faceDy = Math.round(vy / L * FACE_PX);
-        }
+        // BAR: every building in a line/grid drag shares the CURRENT facing — no
+        // per-position auto-rotate; the [ / ] facing applies uniformly. (This
+        // replaces the old endpoint-derived facing, a non-faithful stopgap.)
+        var fv = faceVecFor(facing), faceDx = fv[0], faceDy = fv[1];
         var idx = 0;
         (function placeNext() {
           if (idx >= placements.length) { log('line: ' + placements.length + ' placed'); finishCommit(stillShift); return; }
@@ -402,6 +457,7 @@
       document.addEventListener('keydown', onMod, true);
       document.addEventListener('keyup', onMod, true);
       document.addEventListener('keydown', onSpace, true);
+      document.addEventListener('keydown', onFace, true);
       window.addEventListener('blur', onBlur, true);
       document.addEventListener('mouseleave', onLeave, true);
       window.__barBuildplaceCleanup = function () {
@@ -412,13 +468,14 @@
         document.removeEventListener('keydown', onMod, true);
         document.removeEventListener('keyup', onMod, true);
         document.removeEventListener('keydown', onSpace, true);
+        document.removeEventListener('keydown', onFace, true);
         window.removeEventListener('blur', onBlur, true);
         document.removeEventListener('mouseleave', onLeave, true);
         try { if (frameTimer) clearTimeout(frameTimer); } catch (e) {}
         window.__barLineDragging = false;
       };
 
-      log('buildplace ready (v8) — Shift+drag = LINE, +Alt = GRID; Alt+Z/Alt+X = spacing (per-building); release Shift = single; plain click = native');
+      log('buildplace ready (v9) — plain click = single @ facing; Shift+drag = LINE, +Alt = GRID; [ / ] = facing (S/E/N/W); Alt+Z/X = spacing (per-building); release Shift = single');
     }
   });
 })();

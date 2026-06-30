@@ -84,10 +84,13 @@ bar suppressed while open. Design + verified BAR category spec in
 top-row override (needs hand-authored data), `.`-key cycle-builder, fabber
 auto-return-after-place timing.
 
-## M4 — Build placement: spacing, line & area build  *(b)*
-Build-spacing modifier + persistent spacing, line build (drag a row), area build
-(radius drag → many of one building). World-space drag handler emitting batched
-positioned build orders.
+## M4 — Build placement: spacing, line & area build  *(b)*  ✅ v0.0.5
+Build-spacing modifier + persistent spacing, line build (drag a row), area/grid build,
+and BAR build **facing** (`[` / `]` cycle 0..3 S/E/N/W). Phases 1-6 done: capture-phase
+left-drag handler driving PA's native screen-coord fab path (`unitBeginFab`/`unitEndFab`)
+with arc-length spacing, per-building persisted spacing (Alt+Z/X), and key-controlled
+facing applied as the begin→end fab vector — which **replaced** PA's native continuous
+left-drag-rotate (faithful to BAR's discrete facing). See `docs/BAR-M4-BUILD-PLAN.md`.
 
 ## M5 — Area commands  *(b)*  ✅ v0.0.4
 Radius-drag reclaim / repair / capture / area-attack / area-unload are **PA-native**:

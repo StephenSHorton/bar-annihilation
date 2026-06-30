@@ -72,8 +72,8 @@ line-item transcription of BAR's three official **Grid** keybind reference cards
 | I | Unit Info | 🟢 / 🔲 |
 | O | Guard *(cmd)* | ✅ *nuance* — PA Assist, arms cmd 2 (`model.setCommandIndex(2)`); PA folds guard+assist |
 | P | Gather and Wait *(cmd)* | ⛔ WALL — no PA gather/wait verb |
-| [ | Rotate Left (build) | ⛔ WALL — PA has no in-game build rotation (only map-editor CSG rotate); structures place at fixed orientation |
-| ] | Rotate Right (build) | ⛔ WALL — same |
+| [ | Rotate Left (build) | ✅ M4 Phase 6 — `[` = facing **inc** (`buildplace.js` `onFace`); facing 0..3 = S/E/N/W, cycled, applied as the begin→end fab vector to single/line/grid alike. Screen/camera-relative (PA has no world→screen projection). Replaces PA's native continuous left-drag-rotate (faithful: BAR has only discrete facing). *(Old "⛔ WALL" predated the M4 fab-primitive proof — same overturn as build spacing.)* |
+| ] | Rotate Right (build) | ✅ M4 Phase 6 — `]` = facing **dec**; same |
 
 ### ASDF row
 | Key | BAR action | Status |
@@ -209,8 +209,8 @@ line-item transcription of BAR's three official **Grid** keybind reference cards
 | Key | BAR action | Status |
 |---|---|---|
 | Shift | Queue All The Things | 🟢 native |
-| Z | Increase Build Spacing | ⛔ WALL — PA has no build-spacing action (line/wall spacing is engine-fixed) |
-| X | Decrease Build Spacing | ⛔ WALL — same |
+| Z | Increase Build Spacing | ✅ M4 Phase 5 — Alt+Z = per-building spacing **inc** (`buildplace.js`); widens the line/grid fab step (`SPACING_UNIT` world-units/level), persisted per building in localStorage. *(Old "⛔ WALL" was PA's lack of a NATIVE spacing action — the mod builds spacing from the fab primitive.)* |
+| X | Decrease Build Spacing | ✅ M4 Phase 5 — Alt+X = spacing **dec**; same |
 | C V B N M | ➖ | — |
 
 ### Bottom row
