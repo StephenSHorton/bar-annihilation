@@ -136,8 +136,11 @@
         if (!d || !d.moved) { panelMsg('build.clear', {}); return; }
         if (d.mode === 'single') { panelMsg('build.clear', {}); return; }   // Shift released -> no line/grid preview (PA's hover ghost shows the single)
         var W = window.innerWidth || 1920, H = window.innerHeight || 1080;
-        // approximate ghost spacing in screen px: world step / (world-units-per-px)
-        var ghostPx = (d.step && d.wpp) ? Math.max(8, Math.min(240, d.step / (d.wpp * uiScale()))) : GHOST_DEFAULT_PX;
+        // approximate ghost spacing in screen px: world step / (world-units-per-px).
+        // Floor only (no ceiling): zoomed in, buildings genuinely ARE far apart on
+        // screen, and a 240px cap pinned the spacing flat so the spacing modifier looked
+        // dead. Floor keeps the draw loop from stalling; MAXN bounds the count.
+        var ghostPx = (d.step && d.wpp) ? Math.max(6, d.step / (d.wpp * uiScale())) : GHOST_DEFAULT_PX;
         var ghosts = [], guard = 0;
         if (d.mode === 'grid') {                                    // box of ghosts filling the drag rectangle
           var gx0 = Math.min(d.x0, d.x1), gx1 = Math.max(d.x0, d.x1), gy0 = Math.min(d.y0, d.y1), gy1 = Math.max(d.y0, d.y1), yy, xx;
@@ -296,6 +299,7 @@
           try {
             var fp = footprintFromSpec(full), step = Math.max(1, stepWorld(fp, d.spec));   // clamp: degenerate footprint -> no infinite stack
             if (!fp.raw) log('footprint DEFAULTED for ' + d.spec + ' (spec fetch missed) — spacing may be off');
+            log('line: step ' + step.toFixed(0) + ' (spacing ' + getSpacing(d.spec) + ')');
             var a = px(d.x0, d.y0), b = px(d.x1, d.y1), pts = [], s;
             for (s = 0; s <= SAMPLES; s++) { var t = s / SAMPLES; pts.push([Math.round(a[0] + t * (b[0] - a[0])), Math.round(a[1] + t * (b[1] - a[1]))]); }
             var rr = h.raycast(pts);
@@ -353,7 +357,7 @@
                   var py = Math.round(ry0 + r * sy);
                   for (c = 0; c < cols; c++) { cc = (r % 2 === 0) ? c : (cols - 1 - c); placements.push([Math.round(rx0 + cc * sx), py]); }   // snake-fill
                 }
-                log('grid: ' + cols + 'x' + rows + ' = ' + placements.length + ' (step ' + step.toFixed(0) + ')');
+                log('grid: ' + cols + 'x' + rows + ' = ' + placements.length + ' (step ' + step.toFixed(0) + ', spacing ' + getSpacing(d.spec) + ')');
                 placeLine(h, placements, stillShift, [FACE_PX, 0]);   // all face along the row axis
               } catch (e) { log('grid then threw: ' + (e && e.message ? e.message : e)); finishCommit(stillShift); }
             }, function (err) { log('grid probe rejected: ' + err); finishCommit(stillShift); });
