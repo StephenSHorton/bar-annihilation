@@ -204,14 +204,42 @@
       // No world->screen projection needed: spacing is computed in WORLD units from
       // the raycast hits, then mapped back to the dense SCREEN samples. Success =
       // a row of EVENLY-spaced, ALL-UPRIGHT buildings queued on one fabber.
-      function specFootprint(spec) {
+      // model.unitSpecs is keyed with a TAG suffix (live_game.js buildItemBySpec):
+      // the buildable's spec lives at `<spec>.player`/`.ai` (or a GW tag), NOT the bare
+      // `<spec>.json`. Mirror that fallback chain so we find placement_size for a
+      // not-yet-built structure.
+      function resolveSpec(spec_id) {
         try {
-          var us = model.unitSpecs[spec] || model.unitSpecs[baseSpec(spec)];
-          if (us && us.placement_size && us.placement_size.length >= 2) {
-            var sep = (typeof us.area_build_separation === 'number') ? us.area_build_separation : 2;
-            return { x: us.placement_size[0], z: us.placement_size[1], sep: sep, raw: true };
-          }
+          var us = model.unitSpecs; if (!us) return null;
+          if (us[spec_id]) return us[spec_id];
+          var canon = (/(.*\.json)/.exec(spec_id) || [])[1] || spec_id;
+          var cands = [spec_id + '.player', spec_id + '.ai', canon + '.player', canon + '.ai', canon];
+          for (var i = 0; i < cands.length; i++) { if (us[cands[i]]) return us[cands[i]]; }
+          for (var k in us) { if (us.hasOwnProperty(k) && k.indexOf(canon) === 0) return us[k]; }   // GW/other tags
         } catch (e) {}
+        return null;
+      }
+      // model.unitSpecs is a STRIPPED table (no placement_size). The real footprint is
+      // in the on-disk unit JSON — fetch it like PA's own code does ($.get spec://…,
+      // which also resolves base_spec inheritance). Cache per-spec.
+      var SPEC_CACHE = {};
+      function jq() { return (typeof window !== 'undefined') ? (window.$ || window.jQuery) : (typeof $ !== 'undefined' ? $ : null); }
+      function fetchFullSpec(specId, cb) {
+        if (SPEC_CACHE[specId]) { cb(SPEC_CACHE[specId]); return; }
+        var $$ = jq(); if (!$$ || !$$.getJSON) { log('no jQuery for spec fetch'); cb(null); return; }
+        var rel = String(specId).replace(/^\//, '');
+        var done = function (spec) { SPEC_CACHE[specId] = spec; cb(spec); };
+        try {
+          $$.getJSON('spec://' + rel).done(done).fail(function () {
+            $$.getJSON('coui://' + rel).done(done).fail(function () { log('fetchFullSpec FAIL: ' + rel); cb(null); });
+          });
+        } catch (e) { log('fetchFullSpec threw: ' + (e && e.message ? e.message : e)); cb(null); }
+      }
+      function footprintFromSpec(spec) {
+        if (spec && spec.placement_size && spec.placement_size.length >= 2) {
+          var sep = (typeof spec.area_build_separation === 'number') ? spec.area_build_separation : 2;
+          return { x: spec.placement_size[0], z: spec.placement_size[1], sep: sep, raw: true };
+        }
         return { x: 12, z: 12, sep: 2, raw: false };
       }
       function d3sq(p, q) { var dx = p[0] - q[0], dy = p[1] - q[1], dz = p[2] - q[2]; return dx * dx + dy * dy + dz * dz; }
@@ -219,13 +247,14 @@
       function line() {
         var g = precheck('B6'); if (!g) return;
         var h = hd(); if (!h || !h.raycast || !h.unitBeginFab || !h.unitEndFab) { log('B6: holodeck fab/raycast unavailable'); return; }
-        var fp = specFootprint(g.spec);
+        fetchFullSpec(g.spec, function (full) {
+        var fp = footprintFromSpec(full);
         var step = Math.max(fp.x, fp.z) + (fp.sep || 0);
         var a = cursorPx();
         var SCREEN_LEN = 500, SAMPLES = 60, MAXN = 40;
         var pts = [], s;
         for (s = 0; s <= SAMPLES; s++) { var t = s / SAMPLES; pts.push([Math.floor(a[0] + t * SCREEN_LEN), a[1]]); }
-        log('B6 LINE: ' + g.spec + ' step=' + step.toFixed(1) + ' (footprint ' + fp.x + 'x' + fp.z + ' sep ' + fp.sep + (fp.raw ? '' : ' DEFAULTED — placement_size not found') + ') sampling ' + (SAMPLES + 1) + 'px right from ' + JSON.stringify(a));
+        log('B6.v9 LINE: ' + g.spec + ' step=' + step.toFixed(1) + ' (footprint ' + fp.x + 'x' + fp.z + ' sep ' + fp.sep + (fp.raw ? ' REAL' : ' DEFAULTED — placement_size not found') + ') sampling ' + (SAMPLES + 1) + 'px right from ' + JSON.stringify(a));
         h.raycast(pts).then(function (hits) {
           if (!hits || !hits.length) { log('B6 raycast empty'); return; }
           var planet = 0, poly = [], i;
@@ -252,22 +281,54 @@
           log('B6 placing ' + placements.length + ' along ' + Math.round(total) + ' world-units (planet=' + planet + ')');
           try { model.executeStartBuild({ item: g.spec, batch: false, cancel: false, urgent: false, more: false }); }
           catch (e) { log('B6 arm threw: ' + (e && e.message ? e.message : e)); return; }
+          // Facing: beginFab==endFab gives the engine's DEFAULT facing, which on a
+          // sphere points a different screen-way at each position -> buildings look
+          // individually rotated. The fab facing = the begin->end screen vector, so
+          // give EVERY placement the SAME vector (the line's overall screen direction)
+          // and they share one facing + line up. (endFab offset sets facing only;
+          // position is the beginFab anchor.)
+          var faceDx = 60, faceDy = 0;
+          if (placements.length >= 2) {
+            var vx = placements[placements.length - 1][0] - placements[0][0];
+            var vy = placements[placements.length - 1][1] - placements[0][1];
+            var L = Math.sqrt(vx * vx + vy * vy) || 1; faceDx = Math.round(vx / L * 60); faceDy = Math.round(vy / L * 60);
+          }
           setTimeout(function () {
             var idx = 0;
             var placeNext = function () {
-              if (idx >= placements.length) { try { if (model.endFabMode) model.endFabMode(); } catch (e) {} log('B6 done — ' + placements.length + ' placed'); return; }
+              if (idx >= placements.length) { try { if (model.endFabMode) model.endFabMode(); } catch (e) {} log('B6 done — ' + placements.length + ' placed, facing=[' + faceDx + ',' + faceDy + ']'); return; }
               var p = placements[idx], queueFlag = (idx > 0), cur = idx; idx++;
               try { h.unitBeginFab(p[0], p[1], true); } catch (e) { log('B6 beginFab[' + cur + '] threw: ' + e); }
-              var r = h.unitEndFab(p[0], p[1], queueFlag, true);
+              var r = h.unitEndFab(p[0] + faceDx, p[1] + faceDy, queueFlag, true);
               if (r && r.then) r.then(function (ok) { if (!ok) log('B6[' + cur + '] endFab ok=false @ ' + JSON.stringify(p)); placeNext(); }, function (e) { log('B6[' + cur + '] endFab FAIL ' + e); placeNext(); });
               else placeNext();
             };
             placeNext();
           }, 80);
         }, function (e) { log('B6 raycast rejected: ' + e); });
+        });
       }
 
-      var TESTS = { 66: gate, 49: fixup, 50: queue, 51: mex, 52: orientOrder, 53: fabPath, 54: line };   // Ctrl+Shift+ B / 1 / 2 / 3 / 4 / 5 / 6
+      // DIAG — dump the unitSpecs landscape so we can SEE the real spec key + footprint
+      // (the spacing bug is that placement_size lookup keeps missing / code not reloaded).
+      function diag() {
+        var us = (typeof model !== 'undefined') ? model.unitSpecs : null;
+        if (!us) { log('DIAG: model.unitSpecs MISSING (type=' + (typeof us) + ')'); return; }
+        var keys = [], k; for (k in us) { if (us.hasOwnProperty(k)) keys.push(k); }
+        log('DIAG: unitSpecs keys=' + keys.length + ' sample=' + JSON.stringify(keys.slice(0, 3)));
+        var air = [], i; for (i = 0; i < keys.length; i++) { if (keys[i].indexOf('air_factory') >= 0) air.push(keys[i]); }
+        log('DIAG: air_factory keys=' + JSON.stringify(air.slice(0, 6)));
+        for (i = 0; i < Math.min(air.length, 3); i++) { var s = us[air[i]]; log('DIAG: ' + air[i] + ' placement_size=' + JSON.stringify(s && s.placement_size) + ' area_sep=' + (s && s.area_build_separation)); }
+        try { var sel = (model.selection && model.selection()) ? model.selection() : null; if (sel && sel.spec_ids) { var bs = [], b; for (b in sel.spec_ids) { if (sel.spec_ids.hasOwnProperty(b)) bs.push(b); } log('DIAG: builder spec_ids=' + JSON.stringify(bs)); } } catch (e) {}
+        var g = precheck('DIAG'); if (g) {
+          log('DIAG: chosen buildable=' + g.spec);
+          fetchFullSpec(g.spec, function (full) {
+            log('DIAG fetched spec -> placement_size=' + JSON.stringify(full && full.placement_size) + ' area_build_separation=' + (full && full.area_build_separation) + ' base_spec=' + (full && full.base_spec));
+          });
+        }
+      }
+
+      var TESTS = { 66: gate, 49: fixup, 50: queue, 51: mex, 52: orientOrder, 53: fabPath, 54: line, 55: diag };   // Ctrl+Shift+ B / 1 / 2 / 3 / 4 / 5 / 6 / 7
       function onKey(e) {
         if (e.ctrlKey && e.shiftKey && !e.altKey) {
           var code = e.which || e.keyCode;
@@ -279,10 +340,11 @@
         }
       }
       document.addEventListener('keydown', onKey, true);
-      log('build-probe ready (DEV) — select ONE fabber/commander, point at OPEN GROUND, press:');
+      log('build-probe ready (DEV v9) — select ONE fabber/commander, point at OPEN GROUND, press:');
       log('  Ctrl+Shift+B=gate  +1=fixup(loc.orient)  +2=queue 3  +3=mex snap  +4=order.orient  +5=fab-path(engine orient)');
       log('  ORIENT settled: +5 (native fab) builds UPRIGHT; sendOrder build tilts + teleports. M4 uses the fab path.');
       log('  Ctrl+Shift+6 = LINE: world-spaced row via the fab path (the M4 placement engine) — expect EVEN + all UPRIGHT');
+      log('  Ctrl+Shift+7 = DIAG: dump unitSpecs keys + air_factory placement_size + resolveSpec result');
     }
   });
 })();
