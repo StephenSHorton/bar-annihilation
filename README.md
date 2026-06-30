@@ -10,10 +10,11 @@ to run in any online match regardless of what other players use. Think of it as
 a PA port of BAR's LuaUI control widgets, rewritten in JavaScript against PA's
 Coherent UI layer.
 
-> Status: **early release (v0.0.4)** — a first cut of the control scheme is
-> playable (smart selection, grid build menu, freehand formations with a live
-> preview, area commands, persistent order lines); more BAR features are landing
-> per the roadmap. The full feature spec is researched and locked (see below).
+> Status: **early release (v0.0.5)** — a first cut of the control scheme is
+> playable (smart selection, grid build menu, drag-to-build line & grid placement
+> with per-building spacing, freehand formations with a live preview, area
+> commands, persistent order lines); more BAR features are landing per the
+> roadmap. The full feature spec is researched and locked (see below).
 
 ## What's here
 
