@@ -94,27 +94,37 @@ synthesized screen coords per position (messier, screen-space) — but prove `se
 
 ## Phases (after the gate)
 
-1. **Scaffold + left-drag capture** — `modules/buildplace.js`, capture-phase listeners
-   guarded by `button===0` + onHolodeck + `model.mode()==='fab'`; pre-empt PA's native fab
-   mousedown (live_game.js:3178-3183) via stopImmediatePropagation, or escalate only past a
-   drag threshold and cancel native fab. Idempotent `window.__barBuildCleanup`. Click (no
-   drag) → let PA's native single placement run untouched.
-2. **Line build (Shift+drag)** — `step = max(placement_size) + area_build_separation`
-   (× spacing modifier). Dense-`raycast` the screen segment (one batch), walk world
-   arc-length by `step`, lerp screen samples, loop `unitBeginFab`/`unitEndFab(snap=true)`
-   (first `queue=shift?true:false`, rest true), end with `endFabMode()`. No
-   Hungarian/decross — build order is positional. **Proven in isolation by probe B6
-   (Ctrl+Shift+6) before the live drag seam is wired.**
-3. **Preview overlay** — clone `formation_overlay.html` → `build_overlay.html`, ghost
-   rect/dot per slot, rAF-coalesced. Preview approximate in screen space during drag;
-   snapped truth at release (per-move fixup is async/racy).
-4. **Area / grid build (Shift+Alt+drag)** — modifier mapping; snake-fill (getBuildPositionsGrid);
-   cap ~200 (BAR MAX_DRAG_BUILD_COUNT); `fixupBuildLocations` the whole batch once.
+1. ✅ **Scaffold + Shift+left-drag capture** — `modules/buildplace.js`, capture-phase
+   listeners; PRE-EMPT (not escalate-cancel): on Shift+left+armed+onHolodeck we
+   stopImmediatePropagation so PA's native fab never starts for that press. Plain
+   (non-Shift) clicks/drags pass through untouched. Idempotent `__barBuildplaceCleanup`
+   + blur/mouseleave + onDown stale-clear. `placing` re-entrancy guard.
+2. ✅ **Line build (Shift+drag)** — `step = max(placement_size)+area_build_separation`;
+   dense-`raycast` the segment (one batch), walk world arc-length by `step`, lerp screen
+   samples, fab loop `unitBeginFab`/`unitEndFab(snap=true)` with ONE shared facing,
+   `queue=true` (append). `finishCommit` single-exit. Footprint from the on-disk spec
+   (`$.get('spec://…')`); `model.unitSpecs` is stripped.
+3. ✅ **Preview overlay** — `buildplace_overlay.html` (no-input panel), rAF-coalesced,
+   screen-space approximate during drag (scale-probe for ghost spacing); authoritative
+   raycast only at release.
+4. ✅ **Area / grid build (Shift+Alt+drag)** — live line↔grid↔single toggle via
+   `dragMode()` from the live modifiers (BAR re-evaluates each frame; release-Shift =
+   permanent single for that drag, BAR :736); snake-fill, cap MAXN=200; per-axis screen
+   step from a centre scale-probe.
 5. **Spacing modifier (persistent)** — int 0-16, inc/dec keys (BAR: Alt+Z/Alt+X + mouse4/5),
    persist per-building-NAME in localStorage; live preview reflects it; publish to BA.binds.
-6. **Facing + native-suppression + polish** — investigate whether `sendOrder` honors
-   facing/orient (likely a wall → degrade to PA auto-orient, document it); suppress native
-   fab ghost during our drag; Esc cancels; bump modinfo; ROADMAP M4 → DONE.
+   `step` currently has no spacing term — add `+ spacing*gridcell*2` (BAR
+   calculateBuildingPlacementSteps:361). **Careful:** tap-Alt for spacing must not be
+   confused with hold-Alt for grid.
+6. **Facing keys + native-drag-rotate suppression + polish** — port BAR's facing rotate
+   keys (buildFacingHandler; 0–3, applied as the shared begin→end fab vector). **DECISION
+   (deferred, 2026-06-29):** PA's stock left-DRAG = rotate-facing-then-place-one; we
+   currently leave plain left-drag fully native (only Shift+drag is ours). When the
+   facing keys land, SUPPRESS PA's native left-drag-rotate at the SAME TIME (so the user
+   never loses the ability to rotate a single building) — i.e. only then does buildplace
+   claim plain left presses for a no-rotate single placement, facing via keys. Do NOT
+   suppress it before the keys exist. Also: Esc cancels (done); bump modinfo; de-list
+   build-probe.js; ROADMAP M4 → DONE.
 
 ## Risks / walls (degrade faithfully, never fake)
 - **Gate risk:** `command:'build'` unexercised via sendOrder — Phase 0 proves it.
