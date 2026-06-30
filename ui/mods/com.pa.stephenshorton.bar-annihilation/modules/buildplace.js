@@ -30,6 +30,7 @@
   BA.register({
     name: 'buildplace',
     init: function () {
+      var DBG = false;            // DEV: log onDown predicate inputs on left-press (flip on to diagnose)
       var DRAG_PX = 8;            // press travel (screen px) before it counts as a drag
       var SAMPLES = 60;           // dense screen samples raycast along the drag (one batch)
       var MAXN = 200;             // BAR MAX_DRAG_BUILD_COUNT cap
@@ -160,6 +161,9 @@
         // During an in-flight commit, fab is still armed; block a stray left press on
         // the holodeck so PA can't start a concurrent native fab and corrupt fab state.
         if (placing) { if (e.button === 0 && onHolodeck(e.target)) { e.preventDefault(); e.stopImmediatePropagation(); } return; }
+        if (DBG && e.button === 0 && onHolodeck(e.target)) {
+          try { log('onDown L shift=' + !!e.shiftKey + ' alt=' + !!e.altKey + ' ctrl=' + !!e.ctrlKey + ' mode=' + ((typeof model !== 'undefined' && model && model.mode) ? model.mode() : '?') + ' csid=' + ((typeof model !== 'undefined' && model && model.currentBuildStructureId) ? model.currentBuildStructureId() : '?') + ' selMobile=' + ((typeof model !== 'undefined' && model && model.selectedMobile) ? model.selectedMobile() : '?') + ' armed=' + armedSpec()); } catch (dbg) { log('onDown dbg threw ' + dbg); }
+        }
         if (e.button !== 0 || !e.shiftKey || e.altKey || e.ctrlKey) return;   // BAR LINE = shift only
         if (!onHolodeck(e.target)) return;
         if (BA.util.uiBusy && BA.util.uiBusy()) return;
@@ -186,7 +190,10 @@
 
       function onMove(e) {
         if (!drag) return;
-        if (!(e.buttons & 1)) { endDrag(); return; }     // left no longer held -> lost mouseup, self-heal
+        // NOTE: do NOT gate on e.buttons here — PA's Coherent webview reports
+        // e.buttons=0 during capture-phase mousemove, which would kill the drag on
+        // the first move. Lost-mouseup recovery is handled by onDown stale-clear +
+        // blur/mouseleave instead.
         drag.x1 = e.clientX; drag.y1 = e.clientY;
         var dx = drag.x1 - drag.x0, dy = drag.y1 - drag.y0;
         if (!drag.moved && (dx * dx + dy * dy) >= DRAG_PX * DRAG_PX) drag.moved = true;
@@ -302,7 +309,7 @@
         window.__barLineDragging = false;
       };
 
-      log('buildplace ready — Shift+left-drag in build mode = BAR line; plain click = native single placement');
+      log('buildplace ready (v3) — Shift+left-drag in build mode = BAR line; plain click = native single placement');
     }
   });
 })();

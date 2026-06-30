@@ -183,7 +183,9 @@
       }
       function onMove(e) {
         if (!drag) return;
-        if (!(e.buttons & 2)) { drag = null; clearPreview(); return; }   // right no longer held -> lost mouseup, self-heal (don't block PA hover/camera)
+        // NOTE: do NOT gate on e.buttons — PA's Coherent webview reports e.buttons=0
+        // during capture-phase mousemove, which would kill the right-drag on the first
+        // move. Lost-mouseup recovery is the onDown stale-clear + blur/mouseleave.
         drag.x1 = e.clientX; drag.y1 = e.clientY;
         var last = drag.path[drag.path.length - 1];       // accumulate the freehand stroke
         var pdx = e.clientX - last[0], pdy = e.clientY - last[1];
