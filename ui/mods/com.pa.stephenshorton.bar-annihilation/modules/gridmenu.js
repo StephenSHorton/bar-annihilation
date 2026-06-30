@@ -344,6 +344,7 @@
       function consume(e) { e.preventDefault(); e.stopImmediatePropagation(); }
       function onKeyDown(e) {
         if (!grid.open || BA.util.uiBusy()) return;
+        if (e.altKey) return;   // Alt+<key> is reserved (buildplace spacing = Alt+Z/X); gridmenu never uses Alt
         var w = e.which;
         var submenu = grid.isFactory || nav.category !== null;   // a factory grid or an open category
         if (w === KEY_SPACE) { if (grid.isFactory) { spaceHeld = true; consume(e); return false; } return; }
@@ -368,6 +369,7 @@
       }
       function onKeyUp(e) {
         if (!grid.open) return;
+        if (e.altKey) return;   // mirror onKeyDown: Alt+<key> belongs to buildplace spacing
         var w = e.which;
         if (w === KEY_SPACE) { spaceHeld = false; if (grid.isFactory) { consume(e); return false; } return; }
         if (w === KEY_SHIFT) { if (nav.category !== null) goHome(); return; }   // BAR: releasing Shift always returns home

@@ -263,11 +263,12 @@
         var m = dragMode(e, drag);
         if (m !== drag.mode) { drag.mode = m; if (drag.moved) drawPreview(drag); }
       }
-      // [ / ] adjust spacing for the armed building (BAR buildspacing: int 0..MAX,
-      // per-building, persisted). Plain keys — NOT Alt (Alt is the grid toggle). Only
-      // consumed in build mode; works while just armed AND live mid-drag.
+      // BAR buildspacing bind (grid_keys.txt): Alt+Z = inc, Alt+X = dec — and
+      // Shift+Alt+Z/X too, so you tweak it mid grid-drag with Shift+Alt already held.
+      // Per-building, persisted. Only consumed in build mode; works armed AND live mid-drag.
       function onSpace(e) {
-        var code = e.which || e.keyCode, dir = (code === 221) ? 1 : (code === 219) ? -1 : 0;   // ]=+1  [=-1
+        if (!e.altKey) return;                                                              // spacing is Alt-modified (Alt = grid, so this naturally pairs)
+        var code = e.which || e.keyCode, dir = (code === 90) ? 1 : (code === 88) ? -1 : 0;   // Z=inc  X=dec
         if (!dir) return;
         var spec = armedSpec(); if (!spec) return;
         e.preventDefault(); e.stopImmediatePropagation();
@@ -413,7 +414,7 @@
         window.__barLineDragging = false;
       };
 
-      log('buildplace ready (v7) — Shift+drag = LINE, +Alt = GRID; [ / ] = spacing (per-building); release Shift = single; plain click = native');
+      log('buildplace ready (v8) — Shift+drag = LINE, +Alt = GRID; Alt+Z/Alt+X = spacing (per-building); release Shift = single; plain click = native');
     }
   });
 })();
