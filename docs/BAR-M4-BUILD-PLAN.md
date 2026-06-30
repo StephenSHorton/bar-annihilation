@@ -111,11 +111,13 @@ synthesized screen coords per position (messier, screen-space) — but prove `se
    `dragMode()` from the live modifiers (BAR re-evaluates each frame; release-Shift =
    permanent single for that drag, BAR :736); snake-fill, cap MAXN=200; per-axis screen
    step from a centre scale-probe.
-5. **Spacing modifier (persistent)** — int 0-16, inc/dec keys (BAR: Alt+Z/Alt+X + mouse4/5),
-   persist per-building-NAME in localStorage; live preview reflects it; publish to BA.binds.
-   `step` currently has no spacing term — add `+ spacing*gridcell*2` (BAR
-   calculateBuildingPlacementSteps:361). **Careful:** tap-Alt for spacing must not be
-   confused with hold-Alt for grid.
+5. ✅ **Spacing modifier (persistent)** — int 0-16 per building in localStorage, widening
+   `step` by SPACING_UNIT (8 world-units) per level. BAR's real bind: **Alt+Z = inc,
+   Alt+X = dec** (grid_keys.txt:19-22, also Shift+Alt+Z/X) so the hand already on
+   Shift+Alt reaches it mid grid-drag. gridmenu now ignores all Alt-combos (it never used
+   Alt) so Alt+Z/X reach buildplace in every menu state. Transient "Spacing N" DOM
+   readout. Gotcha fixed: a 240px ghost-spacing cap had pinned the preview flat. (Not yet
+   wired: mouse4/5 alt, BA.binds publish — defer.)
 6. **Facing keys + native-drag-rotate suppression + polish** — port BAR's facing rotate
    keys (buildFacingHandler; 0–3, applied as the shared begin→end fab vector). **DECISION
    (deferred, 2026-06-29):** PA's stock left-DRAG = rotate-facing-then-place-one; we
