@@ -121,12 +121,19 @@
         var W = window.innerWidth || 1920, H = window.innerHeight || 1080;
         // approximate ghost spacing in screen px: world step / (world-units-per-px)
         var ghostPx = (d.step && d.wpp) ? Math.max(8, Math.min(240, d.step / (d.wpp * uiScale()))) : GHOST_DEFAULT_PX;
-        var dx = d.x1 - d.x0, dy = d.y1 - d.y0, len = Math.sqrt(dx * dx + dy * dy) || 1;
-        var ux = dx / len, uy = dy / len, ghosts = [], dpx = 0, guard = 0;
-        for (dpx = 0; dpx <= len && guard < MAXN; dpx += ghostPx, guard++) {
-          ghosts.push([(d.x0 + ux * dpx) / W, (d.y0 + uy * dpx) / H]);
+        var ghosts = [], guard = 0;
+        if (d.mode === 'grid') {                                    // box of ghosts filling the drag rectangle
+          var gx0 = Math.min(d.x0, d.x1), gx1 = Math.max(d.x0, d.x1), gy0 = Math.min(d.y0, d.y1), gy1 = Math.max(d.y0, d.y1), yy, xx;
+          for (yy = gy0; yy <= gy1 && guard < MAXN; yy += ghostPx) {
+            for (xx = gx0; xx <= gx1 && guard < MAXN; xx += ghostPx, guard++) ghosts.push([xx / W, yy / H]);
+          }
+          panelMsg('build.draw', { stroke: [], ghosts: ghosts, color: '#6ef06e' });
+        } else {                                                    // line: stroke + ghosts along the drag
+          var dx = d.x1 - d.x0, dy = d.y1 - d.y0, len = Math.sqrt(dx * dx + dy * dy) || 1;
+          var ux = dx / len, uy = dy / len, dpx = 0;
+          for (dpx = 0; dpx <= len && guard < MAXN; dpx += ghostPx, guard++) ghosts.push([(d.x0 + ux * dpx) / W, (d.y0 + uy * dpx) / H]);
+          panelMsg('build.draw', { stroke: [[d.x0 / W, d.y0 / H], [d.x1 / W, d.y1 / H]], ghosts: ghosts, color: '#6ef06e' });
         }
-        panelMsg('build.draw', { stroke: [[d.x0 / W, d.y0 / H], [d.x1 / W, d.y1 / H]], ghosts: ghosts, color: '#6ef06e' });
       }
       function drawPreview(d) {
         frameArg = d;
@@ -164,12 +171,13 @@
         if (DBG && e.button === 0 && onHolodeck(e.target)) {
           try { log('onDown L shift=' + !!e.shiftKey + ' alt=' + !!e.altKey + ' ctrl=' + !!e.ctrlKey + ' mode=' + ((typeof model !== 'undefined' && model && model.mode) ? model.mode() : '?') + ' csid=' + ((typeof model !== 'undefined' && model && model.currentBuildStructureId) ? model.currentBuildStructureId() : '?') + ' selMobile=' + ((typeof model !== 'undefined' && model && model.selectedMobile) ? model.selectedMobile() : '?') + ' armed=' + armedSpec()); } catch (dbg) { log('onDown dbg threw ' + dbg); }
         }
-        if (e.button !== 0 || !e.shiftKey || e.altKey || e.ctrlKey) return;   // BAR LINE = shift only
+        if (e.button !== 0 || !e.shiftKey || e.ctrlKey) return;    // BAR: shift+drag (no ctrl); ctrl reserved for AROUND/BOX
         if (!onHolodeck(e.target)) return;
         if (BA.util.uiBusy && BA.util.uiBusy()) return;
         var spec = armedSpec(); if (!spec) return;                 // only when a build is armed
         e.preventDefault(); e.stopImmediatePropagation();          // PRE-EMPT PA's native fab for this press
-        drag = { spec: spec, x0: e.clientX, y0: e.clientY, x1: e.clientX, y1: e.clientY, moved: false, step: 0, wpp: 0 };
+        // BAR determineBuildMode: shift+alt = GRID, shift alone = LINE.
+        drag = { spec: spec, mode: e.altKey ? 'grid' : 'line', x0: e.clientX, y0: e.clientY, x1: e.clientX, y1: e.clientY, moved: false, step: 0, wpp: 0 };
         var dref = drag;                                           // identity guard for the async callbacks below
         window.__barLineDragging = true;
         // prefetch footprint (so step is ready by mouseup) ...
@@ -212,7 +220,7 @@
         endDrag();                                                 // clears drag + flag + preview
         var h = hd(); if (!h || !h.raycast || !h.unitBeginFab || !h.unitEndFab) { log('holodeck fab/raycast unavailable'); return; }
         if (!d.moved) { placeSingle(h, px(d.x0, d.y0), stillShift); return; }
-        commitLine(d, h, stillShift);
+        if (d.mode === 'grid') commitGrid(d, h, stillShift); else commitLine(d, h, stillShift);
       }
 
       function onEsc(e) {
@@ -264,18 +272,60 @@
         });
       }
 
+      // GRID (Shift+Alt): fill the drag's screen-axis-aligned rectangle with a
+      // world-even grid, snake-filled (BAR getBuildPositionsGrid: alternate row dir
+      // for travel-optimal build order). Screen step per axis derived from a single
+      // centre scale-probe (world-units-per-render-px in X and Y); the engine grid-
+      // snaps each placement, so approximate screen spacing is fine.
+      function commitGrid(d, h, stillShift) {
+        placing = true;
+        fetchFullSpec(d.spec, function (full) {
+          try {
+            var fp = footprintFromSpec(full), step = Math.max(1, stepOf(fp));
+            if (!fp.raw) log('footprint DEFAULTED for ' + d.spec + ' (spec fetch missed) — spacing may be off');
+            var a0 = px(Math.min(d.x0, d.x1), Math.min(d.y0, d.y1));
+            var a1 = px(Math.max(d.x0, d.x1), Math.max(d.y0, d.y1));
+            var rx0 = a0[0], ry0 = a0[1], rx1 = a1[0], ry1 = a1[1];
+            var cxr = Math.round((rx0 + rx1) / 2), cyr = Math.round((ry0 + ry1) / 2);
+            var rr = h.raycast([[cxr, cyr], [cxr + 100, cyr], [cxr, cyr + 100]]);   // centre + X + Y probes, one batch
+            if (!rr || !rr.then) { log('grid probe not thenable'); finishCommit(stillShift); return; }
+            rr.then(function (hits) {
+              try {
+                if (!hits || !hits[0] || !hits[0].pos) { log('grid: centre off terrain'); finishCommit(stillShift); return; }
+                var wppX = (hits[1] && hits[1].pos) ? Math.sqrt(d3sq(hits[1].pos, hits[0].pos)) / 100 : 0;
+                var wppY = (hits[2] && hits[2].pos) ? Math.sqrt(d3sq(hits[2].pos, hits[0].pos)) / 100 : 0;
+                if (!wppX) { log('grid: bad X scale probe'); finishCommit(stillShift); return; }
+                if (!wppY) wppY = wppX;
+                var sx = Math.max(4, step / wppX), sy = Math.max(4, step / wppY);   // screen step px per axis
+                var cols = Math.max(1, Math.floor((rx1 - rx0) / sx) + 1), rows = Math.max(1, Math.floor((ry1 - ry0) / sy) + 1);
+                while (cols * rows > MAXN) { if (cols >= rows) cols--; else rows--; }   // cap total
+                var placements = [], r, c, cc;
+                for (r = 0; r < rows; r++) {
+                  var py = Math.round(ry0 + r * sy);
+                  for (c = 0; c < cols; c++) { cc = (r % 2 === 0) ? c : (cols - 1 - c); placements.push([Math.round(rx0 + cc * sx), py]); }   // snake-fill
+                }
+                log('grid: ' + cols + 'x' + rows + ' = ' + placements.length + ' (step ' + step.toFixed(0) + ')');
+                placeLine(h, placements, stillShift, [FACE_PX, 0]);   // all face along the row axis
+              } catch (e) { log('grid then threw: ' + (e && e.message ? e.message : e)); finishCommit(stillShift); }
+            }, function (err) { log('grid probe rejected: ' + err); finishCommit(stillShift); });
+          } catch (e) { log('grid body threw: ' + (e && e.message ? e.message : e)); finishCommit(stillShift); }
+        });
+      }
+
       function finishCommit(stillShift) {
         if (!stillShift) { try { if (model.endFabMode) model.endFabMode(); } catch (e) {} }
         placing = false;
       }
 
-      function placeLine(h, placements, stillShift) {
+      function placeLine(h, placements, stillShift, faceVec) {
         if (!placements.length) { finishCommit(stillShift); return; }
-        // One shared begin->end facing vector so every building lines up (on a sphere
-        // the engine default points a different screen-way per position). A single
-        // placement uses default facing (faceDx/Dy=0) to match placeSingle.
+        // One shared facing for the whole batch so buildings line up (on a sphere the
+        // engine default points a different screen-way per position). faceVec wins if
+        // given (grid passes the row axis); else derive from the line's endpoints; a
+        // single placement uses default facing (0,0) to match placeSingle.
         var faceDx = 0, faceDy = 0;
-        if (placements.length >= 2) {
+        if (faceVec) { faceDx = faceVec[0]; faceDy = faceVec[1]; }
+        else if (placements.length >= 2) {
           var vx = placements[placements.length - 1][0] - placements[0][0], vy = placements[placements.length - 1][1] - placements[0][1];
           var L = Math.sqrt(vx * vx + vy * vy) || 1; faceDx = Math.round(vx / L * FACE_PX); faceDy = Math.round(vy / L * FACE_PX);
         }
@@ -309,7 +359,7 @@
         window.__barLineDragging = false;
       };
 
-      log('buildplace ready (v3) — Shift+left-drag in build mode = BAR line; plain click = native single placement');
+      log('buildplace ready (v4) — Shift+drag = LINE, Shift+Alt+drag = GRID; plain click = native single placement');
     }
   });
 })();
