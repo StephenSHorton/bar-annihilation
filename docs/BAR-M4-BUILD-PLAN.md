@@ -5,29 +5,51 @@ the fidelity policy: build from primitives, faithful to BAR, no cheap lookalikes
 Companion to `BAR-FORMATIONS-PLAN.md` — M4 reuses the formations architecture almost
 verbatim.
 
-## Verdict: FEASIBLE from a client mod — one empirical gate first
+## Verdict: FEASIBLE from a client mod — gate PASSED, primitive PIVOTED
 
-Same shape as the shipped M6 formations. The placement primitive is
-**`worldview.sendOrder({ command:'build', spec, location:{planet,pos}, queue })`**
-(worldview.js:140-186; `'build'` is in the command list at worldview.js:164, `spec` is
-documented "For build commands" at worldview.js:151). It rides the exact
-`engine.call('worldview.sendOrder', id, JSON.stringify(order))` bridge (worldview.js:183)
-that `formations.js:238` already drives in production for move/attack_ground/patrol.
-Looping N positioned orders is therefore established — nothing in `sendOrder` is
-one-shot or stateful.
+> **DECISION (2026-06-29, post-gate):** the placement primitive is the **native
+> screen-coord fab path** — `holodeck.unitBeginFab(sx,sy,snap)` + `unitEndFab(sx,sy,
+> queue,snap)` (holodeck.js:181-187) — **NOT** `sendOrder({command:'build'})`.
+> The gate proved BOTH place a building, but only the fab path orients correctly.
 
-**Bonus:** `worldview.fixupBuildLocations(spec, planet, [{pos}])` (worldview.js:188-206)
-validates + snaps positions to the build grid and metal spots **server-side**, and
-returns an engine-computed `orient`. So we do **NOT** port BAR's elmo grid-snap math
-(SQUARE_SIZE=8 / BUILD_SQUARE_SIZE=16, gui_pregame_build.lua:316-333) — let PA snap.
+### Gate results (live, build-probe.js)
+- **`sendOrder({command:'build'})` PLACES but is WRONG twice over:** the building stays
+  **tilted** to the planet's frame (orient is not applied — passing `orient` inside
+  `location` *or* at the order level both did nothing, probe B1/B4), **and** the fabber
+  walks to our pos then **teleports** to the sim's own snapped build spot. The order is a
+  sim-level intent that re-derives position/orient server-side and discards ours.
+- **Native fab path (`unitBeginFab`/`unitEndFab`) is UPRIGHT + no teleport** (probe B5).
+  The engine raycasts the *screen* point itself, derives the surface-aligned orient, and
+  snaps to its own build grid. This is what the stock UI uses (live_game.js:3183/3192).
+- **`fixupBuildLocations`** still works (snaps to grid + metal spots, returns orient) but
+  is now only useful for the **preview** (where will it land) — it can't feed the fab
+  path, which takes screen coords and re-snaps itself.
 
-### The gate (medium confidence until proven)
-`command:'build'` via `sendOrder` has **zero stock-UI callers** — PA's native build path
-uses screen-coord `holodeck.unitEndFab` (live_game.js:3192), not world-coord `sendOrder`.
-So the build verb is *documented but unexercised*. **Phase 0 must smoke-test one
-positioned build before any loop is built on top of it.** (Correction from the adversarial
-pass: `unitEndFab` is NOT engine-private — it's a normal mod-callable prototype method;
-it's just the wrong fit because it takes screen coords. `sendOrder` is the right primitive.)
+### Consequence for spacing (no projection function exists)
+The fab path is screen-coord and PA exposes **no world→screen projection** (confirmed:
+nothing in holodeck.js/worldview.js/the camera). We don't need one. `holodeck.raycast`
+(screen→world, batchable, planet-0-safe) lets us compute spacing in **world** units and
+map back to screen:
+1. Dense-`raycast` a set of screen points along the drag segment in ONE batch → a world
+   polyline paired with its screen samples.
+2. Walk the polyline by **arc-length**, stepping every `footprint + separation`.
+3. For each step, lerp the **screen** point between the two bracketing dense samples
+   (adjacent samples are ~px apart, so screen-linear interp is exact) and fire
+   `unitBeginFab`/`unitEndFab(snap=true)`. The engine grid-snaps + orients each.
+
+**Spacing data lives in the spec** (`model.unitSpecs[spec]`), PA's own values:
+`placement_size: [x,z]` (world-unit footprint, e.g. air_factory `[40,40]`) and
+`area_build_separation` (default gap, e.g. `2`). So we still do **NOT** port BAR's elmo
+grid-snap math — PA's footprint+separation + the engine's own snap do it.
+
+**Queue semantics** (mirrors stock `enterQueueMode`, live_game.js:3159): first placement
+`queue=false` (replace) unless Shift was held at drag start; the rest `queue=true`
+(append). `unitEndFab` with `queue=true` keeps `model.mode('fab')` so placements chain;
+end with `model.endFabMode()`.
+
+**Arming** = `model.executeStartBuild({item:spec,...})` (live_game.js:1797) — sets
+`currentBuildStructureId`, calls `api.arch.beginFabMode(spec)`, `mode('fab')` — then the
+fab loop. (Proven by probe B5/B6.)
 
 ## Native (reuse — do NOT reinvent) vs Build (mod-side)
 
@@ -77,10 +99,12 @@ synthesized screen coords per position (messier, screen-space) — but prove `se
    mousedown (live_game.js:3178-3183) via stopImmediatePropagation, or escalate only past a
    drag threshold and cancel native fab. Idempotent `window.__barBuildCleanup`. Click (no
    drag) → let PA's native single placement run untouched.
-2. **Line build (Shift+drag)** — footprint from `model.unitSpecs[spec]` (field TBD),
-   compute count/step, raycast endpoints, generate world positions, `fixupBuildLocations`,
-   loop `sendOrder('build')` (first queue=shift?true:false, rest true). No Hungarian/decross
-   — build order is positional, not unit-assignment.
+2. **Line build (Shift+drag)** — `step = max(placement_size) + area_build_separation`
+   (× spacing modifier). Dense-`raycast` the screen segment (one batch), walk world
+   arc-length by `step`, lerp screen samples, loop `unitBeginFab`/`unitEndFab(snap=true)`
+   (first `queue=shift?true:false`, rest true), end with `endFabMode()`. No
+   Hungarian/decross — build order is positional. **Proven in isolation by probe B6
+   (Ctrl+Shift+6) before the live drag seam is wired.**
 3. **Preview overlay** — clone `formation_overlay.html` → `build_overlay.html`, ghost
    rect/dot per slot, rAF-coalesced. Preview approximate in screen space during drag;
    snapped truth at release (per-move fixup is async/racy).

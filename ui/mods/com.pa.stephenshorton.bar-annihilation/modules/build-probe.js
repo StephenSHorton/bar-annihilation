@@ -159,7 +159,115 @@
         });
       }
 
-      var TESTS = { 66: gate, 49: fixup, 50: queue, 51: mex };   // Ctrl+Shift+ B / 1 / 2 / 3
+      // ORIENT-ORDER — fixup for orient, then pass orient at the ORDER level (vs B1's
+      // location.orient, which the engine ignored — buildings stayed tilted on the planet).
+      function orientOrder() {
+        var g = precheck('B4'); if (!g) return;
+        if (!g.w.fixupBuildLocations) { log('B4: fixupBuildLocations UNAVAILABLE'); return; }
+        groundFrame(function (C, planet) {
+          g.w.fixupBuildLocations(g.spec, planet, [{ pos: C }]).then(function (snapped) {
+            var loc = (snapped && snapped[0]) ? snapped[0] : { pos: C };
+            log('B4 order-level orient: ' + g.spec + ' pos=' + JSON.stringify(r3(loc.pos)) + ' orient=' + JSON.stringify(loc.orient));
+            var order = { units: [g.fab], command: 'build', spec: g.spec, location: { planet: planet, pos: loc.pos }, queue: false };
+            if (loc.orient !== undefined) order.orient = loc.orient;   // ORDER-LEVEL (sibling of location)
+            g.w.sendOrder(order).then(okcb('B4'), errcb('B4'));
+          }, errcb('B4 fixup'));
+        });
+      }
+
+      // FAB-PATH — place via the native screen-coord fab API (engine derives the
+      // surface-aligned orient for free). The fallback architecture if sendOrder
+      // can't carry orient. Arms fab mode, then begins+ends a placement at the cursor.
+      function fabPath() {
+        var g = precheck('B5'); if (!g) return;
+        var h = hd(); if (!h || !h.unitBeginFab || !h.unitEndFab) { log('B5: unitBeginFab/EndFab unavailable'); return; }
+        var px = cursorPx();
+        try {
+          if (model.executeStartBuild) model.executeStartBuild({ item: g.spec, batch: false, cancel: false, urgent: false, more: false });
+          else if (api.arch && api.arch.beginFabMode) api.arch.beginFabMode(g.spec);
+          log('B5 fab-path: armed ' + g.spec + ', placing at screen ' + JSON.stringify(px) + ' (Esc to clear fab mode after)');
+        } catch (e) { log('B5 arm threw: ' + (e && e.message ? e.message : e)); return; }
+        setTimeout(function () {
+          try {
+            h.unitBeginFab(px[0], px[1], false);
+            var r = h.unitEndFab(px[0], px[1], false, false);
+            if (r && r.then) r.then(okcb('B5 endFab'), errcb('B5 endFab')); else log('B5 endFab -> ' + JSON.stringify(r));
+          } catch (e) { log('B5 fab place threw: ' + (e && e.message ? e.message : e)); }
+        }, 60);
+      }
+
+      // --- M4 PLACEMENT-ENGINE test: world-spaced LINE via the native fab path ---
+      // Proves the core M4 loop in isolation, BEFORE the live drag-capture seam:
+      //   dense-raycast a screen segment -> world polyline -> walk by arc-length in
+      //   steps of (footprint + separation) -> place each via unitBeginFab/EndFab
+      //   (snap=true) so the ENGINE grid-snaps + applies the upright orient (B5 win).
+      // No world->screen projection needed: spacing is computed in WORLD units from
+      // the raycast hits, then mapped back to the dense SCREEN samples. Success =
+      // a row of EVENLY-spaced, ALL-UPRIGHT buildings queued on one fabber.
+      function specFootprint(spec) {
+        try {
+          var us = model.unitSpecs[spec] || model.unitSpecs[baseSpec(spec)];
+          if (us && us.placement_size && us.placement_size.length >= 2) {
+            var sep = (typeof us.area_build_separation === 'number') ? us.area_build_separation : 2;
+            return { x: us.placement_size[0], z: us.placement_size[1], sep: sep, raw: true };
+          }
+        } catch (e) {}
+        return { x: 12, z: 12, sep: 2, raw: false };
+      }
+      function d3sq(p, q) { var dx = p[0] - q[0], dy = p[1] - q[1], dz = p[2] - q[2]; return dx * dx + dy * dy + dz * dz; }
+
+      function line() {
+        var g = precheck('B6'); if (!g) return;
+        var h = hd(); if (!h || !h.raycast || !h.unitBeginFab || !h.unitEndFab) { log('B6: holodeck fab/raycast unavailable'); return; }
+        var fp = specFootprint(g.spec);
+        var step = Math.max(fp.x, fp.z) + (fp.sep || 0);
+        var a = cursorPx();
+        var SCREEN_LEN = 500, SAMPLES = 60, MAXN = 40;
+        var pts = [], s;
+        for (s = 0; s <= SAMPLES; s++) { var t = s / SAMPLES; pts.push([Math.floor(a[0] + t * SCREEN_LEN), a[1]]); }
+        log('B6 LINE: ' + g.spec + ' step=' + step.toFixed(1) + ' (footprint ' + fp.x + 'x' + fp.z + ' sep ' + fp.sep + (fp.raw ? '' : ' DEFAULTED — placement_size not found') + ') sampling ' + (SAMPLES + 1) + 'px right from ' + JSON.stringify(a));
+        h.raycast(pts).then(function (hits) {
+          if (!hits || !hits.length) { log('B6 raycast empty'); return; }
+          var planet = 0, poly = [], i;
+          for (i = 0; i < hits.length; i++) {
+            if (hits[i] && hits[i].pos) {
+              if (hits[i].planet !== undefined && hits[i].planet !== null) planet = hits[i].planet;
+              poly.push({ scr: pts[i], pos: hits[i].pos });
+            }
+          }
+          if (poly.length < 2) { log('B6 only ' + poly.length + ' terrain hit(s) — point at OPEN GROUND with room to the right'); return; }
+          var cum = [0], j;
+          for (j = 1; j < poly.length; j++) { cum.push(cum[j - 1] + Math.sqrt(d3sq(poly[j].pos, poly[j - 1].pos))); }
+          var total = cum[cum.length - 1];
+          var placements = [], d;
+          for (d = 0; d <= total && placements.length < MAXN; d += step) {
+            var k = 1; while (k < cum.length && cum[k] < d) k++;
+            if (k >= cum.length) k = cum.length - 1;
+            var seg = (cum[k] - cum[k - 1]) || 1;
+            var f = (d - cum[k - 1]) / seg;
+            var sx = Math.round(poly[k - 1].scr[0] + f * (poly[k].scr[0] - poly[k - 1].scr[0]));
+            var sy = Math.round(poly[k - 1].scr[1] + f * (poly[k].scr[1] - poly[k - 1].scr[1]));
+            placements.push([sx, sy]);
+          }
+          log('B6 placing ' + placements.length + ' along ' + Math.round(total) + ' world-units (planet=' + planet + ')');
+          try { model.executeStartBuild({ item: g.spec, batch: false, cancel: false, urgent: false, more: false }); }
+          catch (e) { log('B6 arm threw: ' + (e && e.message ? e.message : e)); return; }
+          setTimeout(function () {
+            var idx = 0;
+            var placeNext = function () {
+              if (idx >= placements.length) { try { if (model.endFabMode) model.endFabMode(); } catch (e) {} log('B6 done — ' + placements.length + ' placed'); return; }
+              var p = placements[idx], queueFlag = (idx > 0), cur = idx; idx++;
+              try { h.unitBeginFab(p[0], p[1], true); } catch (e) { log('B6 beginFab[' + cur + '] threw: ' + e); }
+              var r = h.unitEndFab(p[0], p[1], queueFlag, true);
+              if (r && r.then) r.then(function (ok) { if (!ok) log('B6[' + cur + '] endFab ok=false @ ' + JSON.stringify(p)); placeNext(); }, function (e) { log('B6[' + cur + '] endFab FAIL ' + e); placeNext(); });
+              else placeNext();
+            };
+            placeNext();
+          }, 80);
+        }, function (e) { log('B6 raycast rejected: ' + e); });
+      }
+
+      var TESTS = { 66: gate, 49: fixup, 50: queue, 51: mex, 52: orientOrder, 53: fabPath, 54: line };   // Ctrl+Shift+ B / 1 / 2 / 3 / 4 / 5 / 6
       function onKey(e) {
         if (e.ctrlKey && e.shiftKey && !e.altKey) {
           var code = e.which || e.keyCode;
@@ -172,7 +280,9 @@
       }
       document.addEventListener('keydown', onKey, true);
       log('build-probe ready (DEV) — select ONE fabber/commander, point at OPEN GROUND, press:');
-      log('  Ctrl+Shift+B=gate(1 build)  Ctrl+Shift+1=fixup+build  Ctrl+Shift+2=queue 3  Ctrl+Shift+3=mex snap');
+      log('  Ctrl+Shift+B=gate  +1=fixup(loc.orient)  +2=queue 3  +3=mex snap  +4=order.orient  +5=fab-path(engine orient)');
+      log('  ORIENT settled: +5 (native fab) builds UPRIGHT; sendOrder build tilts + teleports. M4 uses the fab path.');
+      log('  Ctrl+Shift+6 = LINE: world-spaced row via the fab path (the M4 placement engine) — expect EVEN + all UPRIGHT');
     }
   });
 })();
