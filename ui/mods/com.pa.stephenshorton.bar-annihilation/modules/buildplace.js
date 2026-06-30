@@ -118,6 +118,7 @@
       function paintNow(d) {
         lastFrame = Date.now();
         if (!d || !d.moved) { panelMsg('build.clear', {}); return; }
+        if (d.mode === 'single') { panelMsg('build.clear', {}); return; }   // Shift released -> no line/grid preview (PA's hover ghost shows the single)
         var W = window.innerWidth || 1920, H = window.innerHeight || 1080;
         // approximate ghost spacing in screen px: world step / (world-units-per-px)
         var ghostPx = (d.step && d.wpp) ? Math.max(8, Math.min(240, d.step / (d.wpp * uiScale()))) : GHOST_DEFAULT_PX;
@@ -156,6 +157,14 @@
 
       function endDrag() { drag = null; window.__barLineDragging = false; clearPreview(); }
 
+      // Build mode from the LIVE modifier state. BAR: releasing Shift mid-drag CLEARS
+      // the line anchor permanently (re-pressing Shift won't restore it), so once
+      // dropped we stay 'single' for the rest of the drag. Shift+Alt = grid.
+      function dragMode(e, dr) {
+        if (!e.shiftKey) dr.dropped = true;
+        return dr.dropped ? 'single' : (e.altKey ? 'grid' : 'line');
+      }
+
       // --- capture-phase listeners ----------------------------------------------
       function onDown(e) {
         // Stale-drag recovery: ANY fresh mousedown means a prior gesture is over
@@ -177,7 +186,7 @@
         var spec = armedSpec(); if (!spec) return;                 // only when a build is armed
         e.preventDefault(); e.stopImmediatePropagation();          // PRE-EMPT PA's native fab for this press
         // BAR determineBuildMode: shift+alt = GRID, shift alone = LINE.
-        drag = { spec: spec, mode: e.altKey ? 'grid' : 'line', x0: e.clientX, y0: e.clientY, x1: e.clientX, y1: e.clientY, moved: false, step: 0, wpp: 0 };
+        drag = { spec: spec, mode: e.altKey ? 'grid' : 'line', dropped: false, x0: e.clientX, y0: e.clientY, x1: e.clientX, y1: e.clientY, moved: false, step: 0, wpp: 0 };
         var dref = drag;                                           // identity guard for the async callbacks below
         window.__barLineDragging = true;
         // prefetch footprint (so step is ready by mouseup) ...
@@ -203,7 +212,7 @@
         // the first move. Lost-mouseup recovery is handled by onDown stale-clear +
         // blur/mouseleave instead.
         drag.x1 = e.clientX; drag.y1 = e.clientY;
-        drag.mode = e.altKey ? 'grid' : 'line';          // BAR re-evaluates the mode LIVE during the drag
+        drag.mode = dragMode(e, drag);                   // BAR re-evaluates the mode LIVE during the drag
         var dx = drag.x1 - drag.x0, dy = drag.y1 - drag.y0;
         if (!drag.moved && (dx * dx + dy * dy) >= DRAG_PX * DRAG_PX) drag.moved = true;
         drawPreview(drag);
@@ -215,13 +224,13 @@
         e.preventDefault(); e.stopImmediatePropagation();
         var d = drag;
         d.x1 = e.clientX; d.y1 = e.clientY;                        // mouseup is the authoritative end point
-        d.mode = e.altKey ? 'grid' : 'line';                       // honor the modifier state at release
+        d.mode = dragMode(e, d);                                   // final mode (single if Shift was released mid-drag)
         var dx = d.x1 - d.x0, dy = d.y1 - d.y0;
         if (!d.moved && (dx * dx + dy * dy) >= DRAG_PX * DRAG_PX) d.moved = true;
         var stillShift = e.shiftKey;
         endDrag();                                                 // clears drag + flag + preview
         var h = hd(); if (!h || !h.raycast || !h.unitBeginFab || !h.unitEndFab) { log('holodeck fab/raycast unavailable'); return; }
-        if (!d.moved) { placeSingle(h, px(d.x0, d.y0), stillShift); return; }
+        if (d.mode === 'single' || !d.moved) { placeSingle(h, px(d.x1, d.y1), stillShift); return; }   // Shift dropped or no drag -> one at cursor
         if (d.mode === 'grid') commitGrid(d, h, stillShift); else commitLine(d, h, stillShift);
       }
 
@@ -235,7 +244,7 @@
       // consume, so Alt stays available to PA/other binds.
       function onMod(e) {
         if (!drag) return;
-        var m = e.altKey ? 'grid' : 'line';
+        var m = dragMode(e, drag);
         if (m !== drag.mode) { drag.mode = m; if (drag.moved) drawPreview(drag); }
       }
 
@@ -373,7 +382,7 @@
         window.__barLineDragging = false;
       };
 
-      log('buildplace ready (v5) — Shift+drag = LINE, +Alt = GRID (toggles live mid-drag); plain click = native single placement');
+      log('buildplace ready (v6) — Shift+drag = LINE, +Alt = GRID (live); release Shift mid-drag = single; plain click = native');
     }
   });
 })();
