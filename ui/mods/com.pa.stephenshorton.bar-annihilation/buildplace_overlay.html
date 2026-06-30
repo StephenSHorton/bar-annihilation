@@ -13,10 +13,15 @@
        panel.message('build.draw'/'build.clear'). */
     html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; background:transparent !important; }
     #bc { position:absolute; left:0; top:0; width:100%; height:100%; display:block; }
+    /* transient spacing readout — a DOM node, not the canvas, so it never disturbs the drag preview */
+    #flash { position:absolute; top:8%; left:0; width:100%; text-align:center; font:600 26px/1.2 sans-serif;
+             color:#6ef06e; text-shadow:0 0 6px rgba(0,0,0,0.9),0 2px 3px rgba(0,0,0,0.9);
+             opacity:0; transition:opacity 0.25s ease; pointer-events:none; }
   </style>
 </head>
 <body>
   <canvas id="bc"></canvas>
+  <div id="flash"></div>
   <script type="text/javascript">
     var model = {};
     var handlers = {};
@@ -75,6 +80,14 @@
       window.addEventListener('resize', function () { size(); if (last) draw(last); });
       handlers['build.draw'] = function (payload) { last = payload; draw(payload); };
       handlers['build.clear'] = function () { last = null; clear(); };
+      var flashT = null;
+      handlers['build.flash'] = function (p) {
+        var f = document.getElementById('flash'); if (!f) return;
+        f.textContent = (p && p.text) || '';
+        f.style.opacity = '1';
+        if (flashT) clearTimeout(flashT);
+        flashT = setTimeout(function () { f.style.opacity = '0'; }, 1100);
+      };
       app.registerWithCoherent(model, handlers);
     });
   </script>

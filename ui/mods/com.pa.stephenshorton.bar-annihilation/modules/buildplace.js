@@ -36,6 +36,8 @@
       var MAXN = 200;             // BAR MAX_DRAG_BUILD_COUNT cap
       var FACE_PX = 60;           // begin->end screen offset that sets the shared facing
       var GHOST_DEFAULT_PX = 40;  // preview ghost spacing until the scale probe resolves
+      var SPACING_UNIT = 8;       // world units of gap added per BAR spacing level (tunable analog of 2*SQUARE_SIZE)
+      var SPACING_MAX = 16;       // BAR cmd_limit_build_spacing clamp
 
       function log(m) { BA.log('BUILD ' + m); }
       function uiScale() { try { var u = (typeof model !== 'undefined' && model.uiScale) ? (typeof model.uiScale === 'function' ? model.uiScale() : model.uiScale) : 1; return u || 1; } catch (e) { return 1; } }
@@ -82,6 +84,20 @@
         return { x: 12, z: 12, sep: 2, raw: false };
       }
       function stepOf(fp) { return Math.max(fp.x, fp.z) + (fp.sep || 0); }
+
+      // Per-building spacing (BAR cmd_persistent_build_spacing): int 0..MAX kept per spec
+      // id in localStorage; widens the step by SPACING_UNIT per level (BAR adds
+      // SQUARE_SIZE*spacing*2 to the footprint).
+      var SPACE_LS_KEY = 'barann.buildspacing';
+      var SPACING = {};
+      try { var _sraw = (typeof window !== 'undefined' && window.localStorage) ? localStorage.getItem(SPACE_LS_KEY) : null; if (_sraw) SPACING = JSON.parse(_sraw) || {}; } catch (e) { SPACING = {}; }
+      function getSpacing(spec) { var v = SPACING[spec]; return (typeof v === 'number') ? v : 0; }
+      function setSpacing(spec, v) {
+        v = Math.max(0, Math.min(SPACING_MAX, v | 0)); SPACING[spec] = v;
+        try { if (typeof window !== 'undefined' && window.localStorage) localStorage.setItem(SPACE_LS_KEY, JSON.stringify(SPACING)); } catch (e) {}
+        return v;
+      }
+      function stepWorld(fp, spec) { return stepOf(fp) + getSpacing(spec) * SPACING_UNIT; }
 
       // --- live preview overlay (no-input <panel> composited ON TOP of the 3D;
       // the live_game host doc paints BELOW the world). Same pattern as formations.
@@ -190,7 +206,7 @@
         var dref = drag;                                           // identity guard for the async callbacks below
         window.__barLineDragging = true;
         // prefetch footprint (so step is ready by mouseup) ...
-        fetchFullSpec(spec, function (full) { if (drag === dref) dref.step = stepOf(footprintFromSpec(full)); });
+        fetchFullSpec(spec, function (full) { if (drag === dref) { dref.fp = footprintFromSpec(full); dref.step = stepWorld(dref.fp, spec); } });
         // ... and probe world-units-per-RENDER-px once, for the preview ghost spacing.
         var h = hd();
         if (h && h.raycast) {
@@ -247,6 +263,19 @@
         var m = dragMode(e, drag);
         if (m !== drag.mode) { drag.mode = m; if (drag.moved) drawPreview(drag); }
       }
+      // [ / ] adjust spacing for the armed building (BAR buildspacing: int 0..MAX,
+      // per-building, persisted). Plain keys — NOT Alt (Alt is the grid toggle). Only
+      // consumed in build mode; works while just armed AND live mid-drag.
+      function onSpace(e) {
+        var code = e.which || e.keyCode, dir = (code === 221) ? 1 : (code === 219) ? -1 : 0;   // ]=+1  [=-1
+        if (!dir) return;
+        var spec = armedSpec(); if (!spec) return;
+        e.preventDefault(); e.stopImmediatePropagation();
+        var v = setSpacing(spec, getSpacing(spec) + dir);
+        if (drag) { if (drag.fp) drag.step = stepWorld(drag.fp, spec); if (drag.moved) drawPreview(drag); }
+        panelMsg('build.flash', { text: 'Spacing ' + v });
+        log('spacing[' + spec + '] = ' + v);
+      }
 
       // Recovery: a mouseup lost off-window/on blur would strand drag. Clear it.
       function onBlur() { if (drag) endDrag(); }
@@ -264,7 +293,7 @@
         placing = true;
         fetchFullSpec(d.spec, function (full) {
           try {
-            var fp = footprintFromSpec(full), step = Math.max(1, stepOf(fp));   // clamp: degenerate footprint -> no infinite stack
+            var fp = footprintFromSpec(full), step = Math.max(1, stepWorld(fp, d.spec));   // clamp: degenerate footprint -> no infinite stack
             if (!fp.raw) log('footprint DEFAULTED for ' + d.spec + ' (spec fetch missed) — spacing may be off');
             var a = px(d.x0, d.y0), b = px(d.x1, d.y1), pts = [], s;
             for (s = 0; s <= SAMPLES; s++) { var t = s / SAMPLES; pts.push([Math.round(a[0] + t * (b[0] - a[0])), Math.round(a[1] + t * (b[1] - a[1]))]); }
@@ -300,7 +329,7 @@
         placing = true;
         fetchFullSpec(d.spec, function (full) {
           try {
-            var fp = footprintFromSpec(full), step = Math.max(1, stepOf(fp));
+            var fp = footprintFromSpec(full), step = Math.max(1, stepWorld(fp, d.spec));
             if (!fp.raw) log('footprint DEFAULTED for ' + d.spec + ' (spec fetch missed) — spacing may be off');
             var a0 = px(Math.min(d.x0, d.x1), Math.min(d.y0, d.y1));
             var a1 = px(Math.max(d.x0, d.x1), Math.max(d.y0, d.y1));
@@ -367,6 +396,7 @@
       document.addEventListener('keydown', onEsc, true);
       document.addEventListener('keydown', onMod, true);
       document.addEventListener('keyup', onMod, true);
+      document.addEventListener('keydown', onSpace, true);
       window.addEventListener('blur', onBlur, true);
       document.addEventListener('mouseleave', onLeave, true);
       window.__barBuildplaceCleanup = function () {
@@ -376,13 +406,14 @@
         document.removeEventListener('keydown', onEsc, true);
         document.removeEventListener('keydown', onMod, true);
         document.removeEventListener('keyup', onMod, true);
+        document.removeEventListener('keydown', onSpace, true);
         window.removeEventListener('blur', onBlur, true);
         document.removeEventListener('mouseleave', onLeave, true);
         try { if (frameTimer) clearTimeout(frameTimer); } catch (e) {}
         window.__barLineDragging = false;
       };
 
-      log('buildplace ready (v6) — Shift+drag = LINE, +Alt = GRID (live); release Shift mid-drag = single; plain click = native');
+      log('buildplace ready (v7) — Shift+drag = LINE, +Alt = GRID; [ / ] = spacing (per-building); release Shift = single; plain click = native');
     }
   });
 })();
