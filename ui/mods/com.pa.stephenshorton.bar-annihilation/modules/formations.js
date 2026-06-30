@@ -171,6 +171,10 @@
 
       function onDown(e) {
         if (e.button !== 2 || !onHolodeck(e.target)) return;
+        if (window.__barLineDragging) return;             // a buildplace line drag owns input
+        // In build/fab mode, RIGHT-click is PA's native cancel-build — let it pass.
+        // (formations commands units; it must not hijack RMB while placing buildings.)
+        try { var fm = (typeof model !== 'undefined' && model && model.mode) ? model.mode() : ''; if (fm === 'fab' || fm === 'fab_rotate') return; } catch (e2) {}
         if (BA.util.uiBusy && BA.util.uiBusy()) return;
         e.preventDefault(); e.stopImmediatePropagation();   // beat PA's bubble-phase 'mousedown.stock'
         var sel = BA.util.readSelection();
