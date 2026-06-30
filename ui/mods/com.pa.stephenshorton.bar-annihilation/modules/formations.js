@@ -170,6 +170,7 @@
       var drag = null;   // { x0,y0, x1,y1, moved, queue, path, n, armed }
 
       function onDown(e) {
+        if (drag) { drag = null; clearPreview(); }        // stale-drag recovery: any fresh press ends a stranded drag
         if (e.button !== 2 || !onHolodeck(e.target)) return;
         if (window.__barLineDragging) return;             // a buildplace line drag owns input
         // In build/fab mode, RIGHT-click is PA's native cancel-build — let it pass.
@@ -182,6 +183,7 @@
       }
       function onMove(e) {
         if (!drag) return;
+        if (!(e.buttons & 2)) { drag = null; clearPreview(); return; }   // right no longer held -> lost mouseup, self-heal (don't block PA hover/camera)
         drag.x1 = e.clientX; drag.y1 = e.clientY;
         var last = drag.path[drag.path.length - 1];       // accumulate the freehand stroke
         var pdx = e.clientX - last[0], pdy = e.clientY - last[1];
@@ -290,6 +292,8 @@
       }
 
       function onEsc(e) { if (e.keyCode === 27 || e.which === 27) { if (drag) { drag = null; clearPreview(); } } }
+      function onBlur() { if (drag) { drag = null; clearPreview(); } }                                                   // alt-tab mid-drag -> recover
+      function onLeave(e) { if (drag && (e.target === document || e.relatedTarget === null)) { drag = null; clearPreview(); } }
 
       // IDEMPOTENCY — critical for the Ctrl+Shift+R dev loop. A scene reload re-runs
       // this module, but the live_game document PERSISTS, so our capture-phase
@@ -302,11 +306,15 @@
       document.addEventListener('mousemove', onMove, true);
       document.addEventListener('mouseup', onUp, true);
       document.addEventListener('keydown', onEsc, true);
+      window.addEventListener('blur', onBlur, true);
+      document.addEventListener('mouseleave', onLeave, true);
       window.__barFormCleanup = function () {
         document.removeEventListener('mousedown', onDown, true);
         document.removeEventListener('mousemove', onMove, true);
         document.removeEventListener('mouseup', onUp, true);
         document.removeEventListener('keydown', onEsc, true);
+        window.removeEventListener('blur', onBlur, true);
+        document.removeEventListener('mouseleave', onLeave, true);
         try { if (frameTimer) clearTimeout(frameTimer); } catch (e) {}
       };
 

@@ -119,7 +119,7 @@
         if (!d || !d.moved) { panelMsg('build.clear', {}); return; }
         var W = window.innerWidth || 1920, H = window.innerHeight || 1080;
         // approximate ghost spacing in screen px: world step / (world-units-per-px)
-        var ghostPx = (d.step && d.wpp) ? Math.max(8, Math.min(240, d.step / d.wpp)) : GHOST_DEFAULT_PX;
+        var ghostPx = (d.step && d.wpp) ? Math.max(8, Math.min(240, d.step / (d.wpp * uiScale()))) : GHOST_DEFAULT_PX;
         var dx = d.x1 - d.x0, dy = d.y1 - d.y0, len = Math.sqrt(dx * dx + dy * dy) || 1;
         var ux = dx / len, uy = dy / len, ghosts = [], dpx = 0, guard = 0;
         for (dpx = 0; dpx <= len && guard < MAXN; dpx += ghostPx, guard++) {
@@ -157,24 +157,27 @@
         // runs. (Critical: a stale drag left live would make the NEXT plain click's
         // onUp stopImmediatePropagation PA's input.capture overlay and lock input.)
         if (drag) endDrag();
-        if (placing) return;                                       // ignore new gesture mid-commit
+        // During an in-flight commit, fab is still armed; block a stray left press on
+        // the holodeck so PA can't start a concurrent native fab and corrupt fab state.
+        if (placing) { if (e.button === 0 && onHolodeck(e.target)) { e.preventDefault(); e.stopImmediatePropagation(); } return; }
         if (e.button !== 0 || !e.shiftKey || e.altKey || e.ctrlKey) return;   // BAR LINE = shift only
         if (!onHolodeck(e.target)) return;
         if (BA.util.uiBusy && BA.util.uiBusy()) return;
         var spec = armedSpec(); if (!spec) return;                 // only when a build is armed
         e.preventDefault(); e.stopImmediatePropagation();          // PRE-EMPT PA's native fab for this press
         drag = { spec: spec, x0: e.clientX, y0: e.clientY, x1: e.clientX, y1: e.clientY, moved: false, step: 0, wpp: 0 };
+        var dref = drag;                                           // identity guard for the async callbacks below
         window.__barLineDragging = true;
         // prefetch footprint (so step is ready by mouseup) ...
-        fetchFullSpec(spec, function (full) { if (drag) drag.step = stepOf(footprintFromSpec(full)); });
-        // ... and probe world-units-per-screen-px once, for the preview ghost spacing.
+        fetchFullSpec(spec, function (full) { if (drag === dref) dref.step = stepOf(footprintFromSpec(full)); });
+        // ... and probe world-units-per-RENDER-px once, for the preview ghost spacing.
         var h = hd();
         if (h && h.raycast) {
           var a = px(e.clientX, e.clientY);
           try {
             h.raycast([[a[0], a[1]], [a[0] + 100, a[1]]]).then(function (hits) {
-              if (drag && hits && hits[0] && hits[0].pos && hits[1] && hits[1].pos) {
-                drag.wpp = Math.sqrt(d3sq(hits[1].pos, hits[0].pos)) / 100;
+              if (drag === dref && hits && hits[0] && hits[0].pos && hits[1] && hits[1].pos) {
+                dref.wpp = Math.sqrt(d3sq(hits[1].pos, hits[0].pos)) / 100;
               }
             }, function () {});
           } catch (e2) {}
@@ -183,6 +186,7 @@
 
       function onMove(e) {
         if (!drag) return;
+        if (!(e.buttons & 1)) { endDrag(); return; }     // left no longer held -> lost mouseup, self-heal
         drag.x1 = e.clientX; drag.y1 = e.clientY;
         var dx = drag.x1 - drag.x0, dy = drag.y1 - drag.y0;
         if (!drag.moved && (dx * dx + dy * dy) >= DRAG_PX * DRAG_PX) drag.moved = true;
@@ -199,7 +203,7 @@
         if (!d.moved && (dx * dx + dy * dy) >= DRAG_PX * DRAG_PX) d.moved = true;
         var stillShift = e.shiftKey;
         endDrag();                                                 // clears drag + flag + preview
-        var h = hd(); if (!h) { log('no holodeck'); return; }
+        var h = hd(); if (!h || !h.raycast || !h.unitBeginFab || !h.unitEndFab) { log('holodeck fab/raycast unavailable'); return; }
         if (!d.moved) { placeSingle(h, px(d.x0, d.y0), stillShift); return; }
         commitLine(d, h, stillShift);
       }
@@ -220,28 +224,36 @@
         if (!stillShift) { try { if (model.endFabMode) model.endFabMode(); } catch (e) {} }
       }
 
+      // finishCommit is the SINGLE guaranteed exit — every error path must reach it or
+      // `placing` stays true and silently disables line build for the rest of the match.
       function commitLine(d, h, stillShift) {
         placing = true;
         fetchFullSpec(d.spec, function (full) {
-          var fp = footprintFromSpec(full), step = stepOf(fp);
-          if (!fp.raw) log('footprint DEFAULTED for ' + d.spec + ' (spec fetch missed) — spacing may be off');
-          var a = px(d.x0, d.y0), b = px(d.x1, d.y1), pts = [], s;
-          for (s = 0; s <= SAMPLES; s++) { var t = s / SAMPLES; pts.push([Math.round(a[0] + t * (b[0] - a[0])), Math.round(a[1] + t * (b[1] - a[1]))]); }
-          h.raycast(pts).then(function (hits) {
-            if (!hits || !hits.length) { log('line raycast empty'); finishCommit(stillShift); return; }
-            var poly = [], i;
-            for (i = 0; i < hits.length; i++) { if (hits[i] && hits[i].pos) poly.push({ scr: pts[i], pos: hits[i].pos }); }
-            if (poly.length < 2) { log('drag crossed too little open ground (' + poly.length + ' hits)'); finishCommit(stillShift); return; }
-            var cum = [0], j;
-            for (j = 1; j < poly.length; j++) cum.push(cum[j - 1] + Math.sqrt(d3sq(poly[j].pos, poly[j - 1].pos)));
-            var total = cum[cum.length - 1], placements = [], dd;
-            for (dd = 0; dd <= total && placements.length < MAXN; dd += step) {
-              var k = 1; while (k < cum.length && cum[k] < dd) k++; if (k >= cum.length) k = cum.length - 1;
-              var seg = (cum[k] - cum[k - 1]) || 1, f = (dd - cum[k - 1]) / seg;
-              placements.push([Math.round(poly[k - 1].scr[0] + f * (poly[k].scr[0] - poly[k - 1].scr[0])), Math.round(poly[k - 1].scr[1] + f * (poly[k].scr[1] - poly[k - 1].scr[1]))]);
-            }
-            placeLine(h, placements, stillShift);
-          }, function (err) { log('line raycast rejected: ' + err); finishCommit(stillShift); });
+          try {
+            var fp = footprintFromSpec(full), step = Math.max(1, stepOf(fp));   // clamp: degenerate footprint -> no infinite stack
+            if (!fp.raw) log('footprint DEFAULTED for ' + d.spec + ' (spec fetch missed) — spacing may be off');
+            var a = px(d.x0, d.y0), b = px(d.x1, d.y1), pts = [], s;
+            for (s = 0; s <= SAMPLES; s++) { var t = s / SAMPLES; pts.push([Math.round(a[0] + t * (b[0] - a[0])), Math.round(a[1] + t * (b[1] - a[1]))]); }
+            var rr = h.raycast(pts);
+            if (!rr || !rr.then) { log('line raycast not thenable'); finishCommit(stillShift); return; }
+            rr.then(function (hits) {
+              try {
+                if (!hits || !hits.length) { log('line raycast empty'); finishCommit(stillShift); return; }
+                var poly = [], i;
+                for (i = 0; i < hits.length; i++) { if (hits[i] && hits[i].pos) poly.push({ scr: pts[i], pos: hits[i].pos }); }
+                if (poly.length < 2) { log('drag crossed too little open ground (' + poly.length + ' hits)'); finishCommit(stillShift); return; }
+                var cum = [0], j;
+                for (j = 1; j < poly.length; j++) cum.push(cum[j - 1] + Math.sqrt(d3sq(poly[j].pos, poly[j - 1].pos)));
+                var total = cum[cum.length - 1], placements = [], dd;
+                for (dd = 0; dd <= total && placements.length < MAXN; dd += step) {
+                  var k = 1; while (k < cum.length && cum[k] < dd) k++; if (k >= cum.length) k = cum.length - 1;
+                  var seg = (cum[k] - cum[k - 1]) || 1, f = (dd - cum[k - 1]) / seg;
+                  placements.push([Math.round(poly[k - 1].scr[0] + f * (poly[k].scr[0] - poly[k - 1].scr[0])), Math.round(poly[k - 1].scr[1] + f * (poly[k].scr[1] - poly[k - 1].scr[1]))]);
+                }
+                placeLine(h, placements, stillShift);
+              } catch (e) { log('commit then threw: ' + (e && e.message ? e.message : e)); finishCommit(stillShift); }
+            }, function (err) { log('line raycast rejected: ' + err); finishCommit(stillShift); });
+          } catch (e) { log('commit body threw: ' + (e && e.message ? e.message : e)); finishCommit(stillShift); }
         });
       }
 
@@ -253,8 +265,9 @@
       function placeLine(h, placements, stillShift) {
         if (!placements.length) { finishCommit(stillShift); return; }
         // One shared begin->end facing vector so every building lines up (on a sphere
-        // the engine default points a different screen-way per position).
-        var faceDx = FACE_PX, faceDy = 0;
+        // the engine default points a different screen-way per position). A single
+        // placement uses default facing (faceDx/Dy=0) to match placeSingle.
+        var faceDx = 0, faceDy = 0;
         if (placements.length >= 2) {
           var vx = placements[placements.length - 1][0] - placements[0][0], vy = placements[placements.length - 1][1] - placements[0][1];
           var L = Math.sqrt(vx * vx + vy * vy) || 1; faceDx = Math.round(vx / L * FACE_PX); faceDy = Math.round(vy / L * FACE_PX);
@@ -262,9 +275,9 @@
         var idx = 0;
         (function placeNext() {
           if (idx >= placements.length) { log('line: ' + placements.length + ' placed'); finishCommit(stillShift); return; }
-          var p = placements[idx], cur = idx; idx++;
-          try { h.unitBeginFab(p[0], p[1], true); } catch (e) { log('beginFab[' + cur + '] ' + e); }
-          var r = h.unitEndFab(p[0] + faceDx, p[1] + faceDy, true, true);   // queue=true (append) for all
+          var p = placements[idx], cur = idx, r; idx++;
+          try { h.unitBeginFab(p[0], p[1], true); r = h.unitEndFab(p[0] + faceDx, p[1] + faceDy, true, true); }   // queue=true (append) for all
+          catch (e) { log('fab[' + cur + '] threw ' + (e && e.message ? e.message : e)); placeNext(); return; }
           if (r && r.then) r.then(function () { placeNext(); }, function (e) { log('endFab[' + cur + '] FAIL ' + e); placeNext(); });
           else placeNext();
         })();
