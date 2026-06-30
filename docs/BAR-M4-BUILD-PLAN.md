@@ -118,23 +118,20 @@ synthesized screen coords per position (messier, screen-space) — but prove `se
    Alt) so Alt+Z/X reach buildplace in every menu state. Transient "Spacing N" DOM
    readout. Gotcha fixed: a 240px ghost-spacing cap had pinned the preview flat. (Not yet
    wired: mouse4/5 alt, BA.binds publish — defer.)
-6. ✅ **Facing keys + native-drag-rotate suppression + polish** (2026-06-30) — ported BAR's
-   `buildfacing` (grid_keys.txt:15-18: `[` = inc, `]` = dec; facing int 0..3 = S/E/N/W,
-   cycles, sticky + persisted in localStorage). Applied via 4 fixed cardinal begin→end fab
-   vectors (`faceVecFor`) to single **and** line/grid uniformly (BAR: drag-builds share the
-   current facing — replaced the old endpoint-derived line facing, a non-faithful stopgap).
-   **Native left-drag-rotate REPLACED** (user-approved 2026-06-30, faithful: BAR has only
-   discrete facing): the capture-phase `onDown` now claims ALL left presses while a build is
-   armed (`armedSpec()` truthy — the load-bearing guard; when disarmed, clicks reach PA
-   untouched). Plain left = single at facing; `placeSingle` queue semantics fixed to mirror
-   native `enterQueueMode(shiftKey)` (Shift=append+stay armed, none=replace+endFabMode) and
-   restored native's confirm sound + marker so the swap isn't a feel regression. Preview
-   draws a facing tick per ghost; transient "Facing: S/E/N/W" toast. Esc cancels (done);
-   modinfo → 0.0.5 (2026-06-30); `build-probe.js` de-listed from scenes; `DBG` block removed.
-   **CONSTRAINTS (faithful degrade, not bugs):** facing is SCREEN/camera-relative (PA exposes
-   no world→screen projection); PA's pre-click hover GHOST still shows default orientation
-   (we don't control it) so asymmetric buildings "snap" to the [ / ] facing on placement —
-   the toast + the placed building are authoritative.
+6. ✅ **Facing + polish** (2026-06-30) — **DECISION REVISED same day: keep PA's NATIVE
+   left-drag continuous rotation; do NOT bind facing keys.** The user tried the idea of
+   discrete `[` / `]` facing and preferred mouse rotation. So plain (no-shift) left presses
+   are left FULLY NATIVE (PA click-to-place + continuous drag-rotate); the mod only claims
+   SHIFT gestures (line/grid). Line builds face ALONG the drag (endpoint-derived); grid faces
+   along the drag's dominant axis. No facing keys, no native-rotate suppression.
+   - Short-lived history: the `[` / `]` facing keys + native-drag-rotate *replacement* were
+     built + reviewed + committed (`1a56010`) then reverted the same day per user preference.
+     BAR DOES bind `[`=inc/`]`=dec for `buildfacing` (grid_keys.txt:15-18) and the fab
+     primitive CAN do it (4 cardinal begin→end vectors) — kept here as a note in case it's
+     ever wanted as an OPTION. The reason it's out is UX preference, not feasibility.
+   - Kept from that work: `placeSingle` queue fix (mirrors native `enterQueueMode(shiftKey)`)
+     + native confirm sound/marker on shift-singles; `DBG` block removed; `build-probe.js`
+     de-listed from scenes; modinfo → 0.0.5. Esc cancels (done). ROADMAP M4 → DONE.
 
 ## Risks / walls (degrade faithfully, never fake)
 - **Gate risk:** `command:'build'` unexercised via sendOrder — Phase 0 proves it.

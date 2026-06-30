@@ -85,12 +85,12 @@ top-row override (needs hand-authored data), `.`-key cycle-builder, fabber
 auto-return-after-place timing.
 
 ## M4 — Build placement: spacing, line & area build  *(b)*  ✅ v0.0.5
-Build-spacing modifier + persistent spacing, line build (drag a row), area/grid build,
-and BAR build **facing** (`[` / `]` cycle 0..3 S/E/N/W). Phases 1-6 done: capture-phase
-left-drag handler driving PA's native screen-coord fab path (`unitBeginFab`/`unitEndFab`)
-with arc-length spacing, per-building persisted spacing (Alt+Z/X), and key-controlled
-facing applied as the begin→end fab vector — which **replaced** PA's native continuous
-left-drag-rotate (faithful to BAR's discrete facing). See `docs/BAR-M4-BUILD-PLAN.md`.
+Build-spacing modifier + persistent spacing, line build (drag a row), area/grid build.
+Phases 1-6 done: a capture-phase **Shift**+left-drag handler driving PA's native screen-coord
+fab path (`unitBeginFab`/`unitEndFab`) with arc-length spacing and per-building persisted
+spacing (Alt+Z/X). Line/grid face along the drag. PLAIN left-drag is left fully NATIVE — PA's
+own click-to-place + continuous drag-rotation (the user prefers mouse rotation; a discrete
+`[` / `]` facing-key experiment was built then reverted). See `docs/BAR-M4-BUILD-PLAN.md`.
 
 ## M5 — Area commands  *(b)*  ✅ v0.0.4
 Radius-drag reclaim / repair / capture / area-attack / area-unload are **PA-native**:

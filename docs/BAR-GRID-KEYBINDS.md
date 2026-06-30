@@ -72,8 +72,8 @@ line-item transcription of BAR's three official **Grid** keybind reference cards
 | I | Unit Info | 🟢 / 🔲 |
 | O | Guard *(cmd)* | ✅ *nuance* — PA Assist, arms cmd 2 (`model.setCommandIndex(2)`); PA folds guard+assist |
 | P | Gather and Wait *(cmd)* | ⛔ WALL — no PA gather/wait verb |
-| [ | Rotate Left (build) | ✅ M4 Phase 6 — `[` = facing **inc** (`buildplace.js` `onFace`); facing 0..3 = S/E/N/W, cycled, applied as the begin→end fab vector to single/line/grid alike. Screen/camera-relative (PA has no world→screen projection). Replaces PA's native continuous left-drag-rotate (faithful: BAR has only discrete facing). *(Old "⛔ WALL" predated the M4 fab-primitive proof — same overturn as build spacing.)* |
-| ] | Rotate Right (build) | ✅ M4 Phase 6 — `]` = facing **dec**; same |
+| [ | Rotate Left (build) | 🟢 native (mouse) — building rotation is PA's native **left-drag-rotate** (continuous); the mod leaves `[` / `]` UNBOUND. User prefers mouse rotation over discrete keys (2026-06-30); the Phase 6 `[` / `]` facing-key experiment was built then reverted. (Line/grid drag-builds face along the drag automatically.) |
+| ] | Rotate Right (build) | 🟢 native (mouse) — same |
 
 ### ASDF row
 | Key | BAR action | Status |
