@@ -12,17 +12,27 @@ engine support, may not port.
 
 ---
 
-## Current status — v0.0.4 released (2026-06-28)
+## Current status — v0.0.5 released (2026-06-30)
 
 Releases ship via GitHub Releases (the CI workflow builds + attaches the mod zip on a
-published release). **Shipped:** M0 (API verified), part of M1 (selection power tools —
-several real BAR Grid binds, plus the keyboard overlay toggled by a movable on-screen
-**Keys** button), **M3 (grid build menu)**, **M6 (formations** — freehand right-drag
-with a live per-unit preview overlay + non-crossing assignment, v0.0.3), and **M5 (area
-commands** — PA-native arm + left-drag; the mod ensures right-drag formations don't
-hijack them, v0.0.4). Also shipped: persistent order/queue lines (selection-scoped).
-**In progress:** M1 (the faithful `select` DSL tiers). **Next up:** M4 build placement,
-then M7 (unit states & set-target).
+published release). **Shipped:** M0 (API verified), **M1** (faithful `select` DSL engine +
+the real BAR Grid selection binds; keyboard overlay + movable **Keys** button), **M3**
+(grid build menu), **M4** (build placement — line/grid/spacing, native mouse rotation,
+v0.0.5), **M5** (area commands — PA-native arm + left-drag, non-interference gate, v0.0.4),
+**M6** (formations — freehand right-drag + live preview, v0.0.3), and **M7** (unit states:
+fire/move/wait toggles, command modes, repeat, self-destruct; native command/orders bar
+shows the mod's keys). Also shipped: persistent order/queue lines.
+
+**Polish audit (2026-06-30, workflow-scoped):** the remaining "polish" items resolved to
+already-done or walls — Q select-similar is already faithful (the `visible` DSL source is
+dead infra, closed); fabber auto-return already implemented; M4 persist-cursor rejected as
+anti-faithful; M3 `.`-cycle-builder + M7 Alt+G quota + M5 area target-filters are walls
+(not on the Grid cards and/or need a Recoil GameCMD / server-mod PA can't provide from a
+client mod). M3 PriorityUnits top-row deferred (cosmetic; needs a hand-authored PA list).
+
+**In progress:** **M8** (keybind/rebinding layer) — architecture chosen: an in-game
+Coherent rebind panel + a localStorage bind registry (Option B). **Then:** the server-mod
+investigation to reclaim the HP/idle/queue walls (see M0 finding + catalog bucket d).
 
 ---
 
@@ -34,7 +44,11 @@ portable** — orders cross to the C++ sim via `engine.call('holodeck.unitComman
 with `queue` as the only lever; no JS path reads/inserts/removes queue items. Shift-append
 is already native. (The old "M1 — command-queue editing" milestone is therefore dropped.)
 
-## M1 — Selection power tools  *(a)*  🚧 IN PROGRESS
+## M1 — Selection power tools  *(a)*  ✅ DONE (v0.0.4)
+> Faithful `select` DSL engine + the BAR Grid selection binds shipped. The one
+> remaining tier — the `Visible` source (build-order item 7 below) — is **closed**:
+> `Q` "select similar" is already faithful via `selectSameTypeOnScreen`, and a
+> `visible` source would be dead infra (viewport box-select flicker, no consumer).
 The goal is a **faithful** port of BAR's `select Source+_Filter_+Conclusion+`
 ([`select_api.lua`](../../bar-src/luaui/Include/select_api.lua)) — see the design in
 [`SELECT-ENGINE.md`](./SELECT-ENGINE.md). Architecture: one reusable engine
@@ -104,15 +118,22 @@ CustomFormations2 port: freehand right-drag path with arc-length resample + even
 distribution, per-unit `worldview.sendOrder`, GetOrdersNoX non-crossing assignment,
 and a live formation overlay (no-input panel composited over the 3D, rAF-repainted).
 
-## M7 — Unit states & set-target  *(a / d)*
-Fire/move states, on/off, repeat, **set-target** persistent priority, default
-states for new units. Several depend on PA exposing the underlying orders —
-verify per item against the M0 API map.
+## M7 — Unit states & set-target  *(a / d)*  ✅ DONE (v0.0.2+)
+Fire/move states (`;`/`L` absolute-by-tap-count), wait/energy-hold (`Y`), repeat
+(`T` factory build-stance), command modes (attack/reclaim/repair/patrol/guard/
+load/unload/D-gun etc. arm-then-click), self-destruct (`Ctrl+B`). The native
+command/orders bar is patched to show the mod's keys (`actionbar-tooltips.js`).
+**Walls (dropped):** `set-target`/target-ground (no PA verb), Alt+G build-quota
+(needs a Recoil GameCMD PA lacks). Per-unit default-states for new units: deferred.
 
-## M8 — Keybind / control-scheme layer  *(c)*
-A config surface for binds (PA has a JSON keymap but not BAR's
-scancode/keychain semantics) so the above features are rebindable, with sensible
-BAR-like defaults out of the box.
+## M8 — Keybind / control-scheme layer  *(c)*  🚧 IN PROGRESS
+A config surface for binds so the above features are rebindable, with sensible
+BAR-like defaults out of the box. **Architecture chosen (2026-06-30): Option B —
+an in-game Coherent rebind panel + a localStorage bind registry** (`BA.rebind`),
+matching the mod's existing panel pattern; no PA-API mutation. Scope: simple 1:1
+(Mousetrap) binds are rebindable; capture-phase binds (shift+drag build, grid
+slots) shown display-only; key-chaining (BAR's `sc_l,sc_l` multi-tap) deferred to
+a later milestone. Plan: `docs/M8-KEYBIND-PLAN.md`.
 
 ---
 
