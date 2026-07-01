@@ -12,7 +12,7 @@ engine support, may not port.
 
 ---
 
-## Current status — v0.0.5 released (2026-06-30)
+## Current status — v0.0.6 released (2026-06-30)
 
 Releases ship via GitHub Releases (the CI workflow builds + attaches the mod zip on a
 published release). **Shipped:** M0 (API verified), **M1** (faithful `select` DSL engine +
@@ -30,10 +30,11 @@ anti-faithful; M3 `.`-cycle-builder + M7 Alt+G quota + M5 area target-filters ar
 (not on the Grid cards and/or need a Recoil GameCMD / server-mod PA can't provide from a
 client mod). M3 PriorityUnits top-row deferred (cosmetic; needs a hand-authored PA list).
 
-**In review/playtest:** **M8** (keybind/rebinding layer) — built via agent team + adversarial
-review; integrated on `main`, awaiting the one in-game playtest (needs a full PA restart —
-M8 adds new files). **Then:** the server-mod investigation to reclaim the HP/idle/queue walls
-(see M0 finding + catalog bucket d).
+Also shipped: **M8** (keybind/rebinding layer, v0.0.6) — an in-game Coherent rebind panel
+(open via the keyboard overlay's **Rebind Keys** button) + a localStorage `BA.rebind` registry;
+1:1 Mousetrap binds rebindable with live conflict detection, reset/reset-all, and BAR-faithful
+"unbound = does nothing". **Next:** the server-mod investigation to reclaim the HP/idle/queue
+walls (see M0 finding + catalog bucket d).
 
 ---
 
@@ -127,7 +128,7 @@ command/orders bar is patched to show the mod's keys (`actionbar-tooltips.js`).
 **Walls (dropped):** `set-target`/target-ground (no PA verb), Alt+G build-quota
 (needs a Recoil GameCMD PA lacks). Per-unit default-states for new units: deferred.
 
-## M8 — Keybind / control-scheme layer  *(c)*  🔬 BUILT — awaiting playtest
+## M8 — Keybind / control-scheme layer  *(c)*  ✅ v0.0.6
 A config surface for binds so the above features are rebindable, with sensible
 BAR-like defaults out of the box. **Architecture (2026-06-30): Option B — an in-game
 Coherent rebind panel + a localStorage bind registry** (`BA.rebind`), matching the
