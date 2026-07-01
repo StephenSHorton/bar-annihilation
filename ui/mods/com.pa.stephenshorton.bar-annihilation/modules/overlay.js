@@ -205,16 +205,27 @@
         return ch;
       }
 
+      // The capture-phase backslash grab (below) is only valid while `ui.overlay` is
+      // STILL bound to backslash. Once the user rebinds the overlay key, this hardcoded
+      // grab must step aside so it doesn't keep opening on backslash — the rebound key
+      // then toggles via the Mousetrap `ui.overlay` binding, and backslash is swallowed
+      // by the bind layer. Defaults to true if the registry isn't ready (safe fallback).
+      function toggleKeyIsBackslash() {
+        var b = window.BarAnnihilation;
+        try { return !b || !b.rebind || !b.rebind.keyOf || b.rebind.keyOf('ui.overlay') === BS; }
+        catch (e) { return true; }
+      }
       // Capture phase: runs BEFORE PA's Mousetrap/handlers. While the overlay is
       // open we swallow EVERY key (so no game action fires) and act only on our
-      // controls; while closed we only grab the open key.
+      // controls; while closed we only grab the open key (when it's still backslash).
       function onKeyDownCap(e) {
+        var isToggle = e.which === TOGGLE_WHICH && !e.ctrlKey && !e.altKey && !e.shiftKey && toggleKeyIsBackslash();
         if (visible) {
-          if (e.which === 27 || (e.which === TOGGLE_WHICH && !e.ctrlKey && !e.altKey && !e.shiftKey)) { hide(); }
+          if (e.which === 27 || isToggle) { hide(); }
           else if (updMods(e, true)) pushState();
           e.preventDefault(); e.stopImmediatePropagation(); return false;
         }
-        if (e.which === TOGGLE_WHICH && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+        if (isToggle) {
           e.preventDefault(); e.stopImmediatePropagation(); toggle(); return false;
         }
       }
