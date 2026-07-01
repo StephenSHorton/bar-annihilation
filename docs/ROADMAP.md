@@ -33,8 +33,16 @@ client mod). M3 PriorityUnits top-row deferred (cosmetic; needs a hand-authored 
 Also shipped: **M8** (keybind/rebinding layer, v0.0.6) — an in-game Coherent rebind panel
 (open via the keyboard overlay's **Rebind Keys** button) + a localStorage `BA.rebind` registry;
 1:1 Mousetrap binds rebindable with live conflict detection, reset/reset-all, and BAR-faithful
-"unbound = does nothing". **Next:** the server-mod investigation to reclaim the HP/idle/queue
-walls (see M0 finding + catalog bucket d).
+"unbound = does nothing".
+
+**Server-mod investigation — CLOSED, negative (2026-07-01).** A server mod CANNOT reclaim the
+HP / idle / queue / set-target / build-quota walls: PA's sim is a closed C++ box and the JS
+`server-script` layer only orchestrates match setup (spawn / diplomacy / vision / pause) with a
+thin unit-metadata surface — no per-unit HP, command queue, target, idle, or quota accessor, and
+no equivalent of Recoil's in-sim Lua gadgets. And server mods only run in custom/local lobbies,
+never in matchmaking. The six walls are permanent PA-engine limits. Full write-up +
+evidence: [`SERVER-MOD-INVESTIGATION.md`](./SERVER-MOD-INVESTIGATION.md). **Next:** deepen
+client-reachable features (selection / build / formations / command-mode UX).
 
 ---
 
