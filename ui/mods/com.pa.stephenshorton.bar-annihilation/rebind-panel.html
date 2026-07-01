@@ -10,7 +10,7 @@
     html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; }
     body.body_panel { background:rgba(8,12,18,0.82); font-family:Exo,"Segoe UI",sans-serif; color:#cfe3f2; }
     #rb-root { position:absolute; left:0; top:0; right:0; bottom:0; display:flex; align-items:center; justify-content:center; }
-    .rb-box { width:640px; max-height:78%; display:flex; flex-direction:column; padding:16px 18px; box-sizing:border-box;
+    .rb-box { width:640px; max-height:86vh; display:flex; flex-direction:column; padding:16px 18px; box-sizing:border-box;
               background:rgba(14,20,28,0.98); border:1px solid #2b6c9c; border-radius:10px; box-shadow:0 10px 50px rgba(0,0,0,.6); }
     .rb-title { font-size:18px; color:#7fd1ff; letter-spacing:.04em; margin-bottom:12px; }
     .rb-tabs { display:flex; flex-wrap:wrap; margin-bottom:10px; }
@@ -18,7 +18,7 @@
               border:1px solid #33485c; border-radius:6px; cursor:pointer; }
     .rb-tab:hover { color:#cfe3f2; border-color:#3f7fb0; }
     .rb-tab.active { color:#7fd1ff; background:#1c3145; border-color:#2b6c9c; }
-    .rb-list { flex:1; overflow-y:auto; border-top:1px solid #22303f; border-bottom:1px solid #22303f; padding:4px 0; }
+    .rb-list { max-height:60vh; overflow-y:auto; border-top:1px solid #22303f; border-bottom:1px solid #22303f; padding:4px 0; }
     .rb-row { display:flex; align-items:center; padding:6px 4px; border-bottom:1px solid rgba(34,48,63,0.5); }
     .rb-row:last-child { border-bottom:none; }
     .rb-label { flex:1; font-size:13px; color:#cfe3f2; }
@@ -157,13 +157,14 @@
       // Binds persist automatically; power users can read/write BA.rebind.export()/
       // .import() from the console. A click-driven clipboard version is a future item.
       var foot = '<div class="rb-foot">'
+        + '<div class="rb-btn" data-act="back">&#8592; Back to Keys</div>'
         + '<div class="rb-btn" data-act="resetAll">Reset All</div>'
         + '<div class="rb-btn rb-close" data-act="close">Close</div>'
         + '</div>';
       root.innerHTML = '<div class="rb-box">'
         + '<div class="rb-title">BAR Annihilation &mdash; Rebind Keys</div>'
         + '<div class="rb-tabs">' + renderTabs() + '</div>'
-        + '<div class="rb-list">' + renderRows() + '</div>'
+        + '<div class="rb-list" id="rb-list">' + renderRows() + '</div>'
         + foot
         + '</div>'
         + renderModal();
@@ -179,6 +180,7 @@
       var id = node.getAttribute('data-id');
       if (act === 'start') q('rebind.start', { id: id });
       else if (act === 'reset') q('rebind.reset', { id: id });
+      else if (act === 'back') q('rebind.back', {});
       else if (act === 'resetAll') q('rebind.resetAll', {});
       else if (act === 'export') q('rebind.export', {});
       else if (act === 'import') q('rebind.import', {});               // open the paste box
@@ -225,6 +227,16 @@
       // focus it.
       document.addEventListener('mousedown', route, false);
       document.addEventListener('contextmenu', function (e) { e.preventDefault(); }, false);
+      // Scroll the list with the wheel (and swallow it so it doesn't reach the game).
+      function onWheel(e) {
+        var list = document.getElementById('rb-list');
+        if (list) { var d = (e.deltaY != null) ? e.deltaY : (e.wheelDelta != null ? -e.wheelDelta : 0); list.scrollTop += d; }
+        if (e.preventDefault) e.preventDefault();
+        if (e.stopPropagation) e.stopPropagation();
+        return false;
+      }
+      document.addEventListener('wheel', onWheel, false);
+      document.addEventListener('mousewheel', onWheel, false);   // old Coherent/webkit
       render();
       app.registerWithCoherent(model, handlers);
       // Tell the host we're listening now, so it (re)pushes the current list/state.

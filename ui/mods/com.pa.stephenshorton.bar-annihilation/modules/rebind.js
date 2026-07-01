@@ -263,8 +263,14 @@
         if (mode === 'capturing' && isMod(e.which)) { updCapMods(e); lastState = null; pushState(); }
         consume(e); return false;                            // modal: swallow keyups while visible
       }
+      // While the panel is open, swallow the wheel so it doesn't zoom the planet
+      // camera underneath. (The child panel scrolls its own list from its own wheel
+      // handler; this only blocks the host/engine camera zoom.)
+      function onWheelCap(e) { if (!visible) return; e.preventDefault(); e.stopImmediatePropagation(); return false; }
       document.addEventListener('keydown', onKeyDownCap, true);
       document.addEventListener('keyup', onKeyUpCap, true);
+      document.addEventListener('wheel', onWheelCap, true);
+      document.addEventListener('mousewheel', onWheelCap, true);   // old Coherent/webkit
 
       // --- conflict / io actions ----------------------------------------------
       function confirmConflict() {
@@ -313,6 +319,8 @@
         H['rebind.export'] = function () { doExport(); };
         H['rebind.import'] = function (p) { doImport(p); };
         H['rebind.close'] = function () { hide(); };
+        // "Back" -> close the rebind panel and reopen the keyboard overlay we came from.
+        H['rebind.back'] = function () { hide(); if (BA.overlayShow) { try { BA.overlayShow(); } catch (e) {} } };
         // Panel-ready handshake: the child view pings this once its handlers are wired
         // (registerWithCoherent done). Without it, the host's single post-show push can
         // arrive before the panel is listening, then get deduped forever -> empty list.
