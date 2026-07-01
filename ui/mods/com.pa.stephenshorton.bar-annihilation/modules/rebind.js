@@ -35,7 +35,7 @@
       var PANEL_ID = 'barann-rebind-panel';
       var SRC = 'coui://ui/mods/com.pa.stephenshorton.bar-annihilation/rebind-panel.html';
 
-      var visible = false, el = null, pushTimer = null, bound = false;
+      var visible = false, el = null, pushTimer = null, bound = false, panelWasReady = false;
       var lastList = null, lastState = null;
 
       // capture state machine
@@ -169,14 +169,22 @@
           return;
         }
         if (el) el.style.display = '';
-        visible = true;
+        visible = true; panelWasReady = false;
         mode = 'idle'; capId = null; pendingKey = null; pendingOther = null; captureError = null; ioState = null;
         capMods.ctrl = capMods.alt = capMods.shift = false;
         lastList = null; lastState = null;                    // force a fresh push
         forceUpdate();                                        // beat the ~1s hidden-panel poll
         pushList(); pushState();
         if (pushTimer) clearInterval(pushTimer);
-        pushTimer = setInterval(function () { if (visible) { pushList(); pushState(); } else { clearInterval(pushTimer); pushTimer = null; } }, 300);
+        pushTimer = setInterval(function () {
+          if (!visible) { clearInterval(pushTimer); pushTimer = null; return; }
+          // Backstop for the ready race: when the panel first resolves (id>=0), force a
+          // fresh push in case our post-show push (or the panel's ready-ping) was missed.
+          var p = api.panels[PANEL_ID]; var ready = !!(p && p.id !== undefined && p.id >= 0);
+          if (ready && !panelWasReady) { lastList = null; lastState = null; }
+          panelWasReady = ready;
+          pushList(); pushState();
+        }, 300);
         BA.log('rebind -> shown (panel view)');
       }
       function hide() {
@@ -305,6 +313,10 @@
         H['rebind.export'] = function () { doExport(); };
         H['rebind.import'] = function (p) { doImport(p); };
         H['rebind.close'] = function () { hide(); };
+        // Panel-ready handshake: the child view pings this once its handlers are wired
+        // (registerWithCoherent done). Without it, the host's single post-show push can
+        // arrive before the panel is listening, then get deduped forever -> empty list.
+        H['rebind.ready'] = function () { lastList = null; lastState = null; pushList(); pushState(); };
         // Handoff from the kb_overlay footer button: hide the overlay first so
         // exactly one capture handler is active, then show the rebind panel.
         H['overlay:rebind'] = function () { if (BA.overlayHide) { try { BA.overlayHide(); } catch (e) {} } show(); };

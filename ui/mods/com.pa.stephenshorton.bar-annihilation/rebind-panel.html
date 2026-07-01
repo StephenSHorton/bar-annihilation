@@ -227,6 +227,10 @@
       document.addEventListener('contextmenu', function (e) { e.preventDefault(); }, false);
       render();
       app.registerWithCoherent(model, handlers);
+      // Tell the host we're listening now, so it (re)pushes the current list/state.
+      // The host's post-show push can otherwise land before our handlers exist and
+      // then be deduped forever, leaving the list empty.
+      q('rebind.ready', {});
     });
   </script>
 </body>
