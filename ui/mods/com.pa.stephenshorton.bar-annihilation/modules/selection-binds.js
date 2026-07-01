@@ -275,22 +275,36 @@
       // 'keypress' for such keys -> the keydown binding leaks and the old key keeps firing
       // after a rebind. Passing the event fixes that.
       var _boundKeys = [];
+      var _swallow = wrap(function () {});    // blocks PA + does nothing (for keys we own but that are unbound)
       function applyBinds() {
         for (var u = 0; u < _boundKeys.length; u++) { try { Mousetrap.unbind(_boundKeys[u].key, _boundKeys[u].event); } catch (e) {} }
         _boundKeys = [];
-        var all = (BA.rebind && BA.rebind.getAll) ? BA.rebind.getAll() : [], n = 0, keys = [];
+        var all = (BA.rebind && BA.rebind.getAll) ? BA.rebind.getAll() : [], n = 0, keys = [], live = {}, claimed = {};
         for (var i = 0; i < all.length; i++) {
           var r = all[i];
+          // The mod owns its default-key scheme: every default is "claimed" so that when
+          // an action is moved off (or unbound from) its default, that key is SWALLOWED
+          // below rather than falling through to PA's native action for it.
+          if (r.rebindable && r.defaultKey) claimed[r.defaultKey] = true;
           if (!r.rebindable || !r.run || !r.key) continue;      // skip display-only + unbound
           var ev = r.event || 'keydown';
           try {
             Mousetrap.unbind(r.key, ev);
             Mousetrap.bind(r.key, wrap(r.run), ev);
-            _boundKeys.push({ key: r.key, event: ev }); keys.push(r.key); n++;
+            _boundKeys.push({ key: r.key, event: ev }); keys.push(r.key); claimed[r.key] = true; live[r.key] = true; n++;
           } catch (e) { BA.err('failed to bind ' + r.key, e); }
         }
+        // A claimed key that no action currently occupies gets a no-op that blocks PA,
+        // so an unbound key does NOTHING (BAR-faithful) instead of resurfacing PA's
+        // native binding. Bound under keydown (matches how we bind everything else).
+        var sw = 0;
+        for (var ck in claimed) {
+          if (live[ck]) continue;
+          try { Mousetrap.unbind(ck, 'keydown'); Mousetrap.bind(ck, _swallow, 'keydown'); _boundKeys.push({ key: ck, event: 'keydown' }); sw++; }
+          catch (e) {}
+        }
         syncBABinds();                       // keep the overlay's key->label current
-        BA.log('BAR binds applied (' + n + ' keys, PA blocked): ' + keys.join(' '));
+        BA.log('BAR binds applied (' + n + ' keys + ' + sw + ' swallowed, PA blocked): ' + keys.join(' '));
       }
       applyBinds();
 
