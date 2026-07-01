@@ -320,6 +320,13 @@
         try { if (frameTimer) clearTimeout(frameTimer); } catch (e) {}
       };
 
+      // --- BA.rebind: list the capture-phase formation gesture (display-only, M8) -
+      // Additive only — a capture-phase right-drag gesture (not a Mousetrap key); the
+      // rebind panel LISTS it read-only ("fixed"). Behavior unchanged.
+      if (BA.rebind && BA.rebind.register) {
+        BA.rebind.register('formation.move', { rebindable: false, category: 'Formations', label: 'Formation move', displayKey: 'Right-Drag' });
+      }
+
       log('formations ready (freehand preview + per-unit formation) — right-DRAG = per-unit formation w/ on-screen markers; right-CLICK = armed cmd / smart; native custom-formations OFF');
     }
   });

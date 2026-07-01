@@ -426,6 +426,16 @@
       }
       else BA.warn('gridmenu: no handlers map — clicks/hover will not route');
 
+      // --- BA.rebind: list capture-phase grid gestures (display-only, M8) -----
+      // Additive only — these are capture-phase gestures (not single Mousetrap keys),
+      // so the rebind panel LISTS them read-only ("fixed"); behavior is unchanged.
+      if (BA.rebind && BA.rebind.register) {
+        BA.rebind.register('grid.slots',      { rebindable: false, category: 'Build menu', label: 'Build grid slots',        displayKey: 'Q W E R / A S D F / Z X C V' });
+        BA.rebind.register('grid.page',       { rebindable: false, category: 'Build menu', label: 'Build menu: next page',    displayKey: 'B' });
+        BA.rebind.register('grid.back',       { rebindable: false, category: 'Build menu', label: 'Build menu: back / home',  displayKey: 'Esc / release Shift' });
+        BA.rebind.register('grid.queueFront', { rebindable: false, category: 'Build menu', label: 'Queue to front (factory)', displayKey: 'Space' });
+      }
+
       // --- boot --------------------------------------------------------------
       injectStyle();
       ensurePanels();

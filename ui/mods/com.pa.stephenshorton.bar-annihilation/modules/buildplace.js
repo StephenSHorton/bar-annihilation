@@ -433,6 +433,16 @@
         window.__barLineDragging = false;
       };
 
+      // --- BA.rebind: list capture-phase build gestures (display-only, M8) ----
+      // Additive only — capture-phase mouse/modifier gestures (not single Mousetrap
+      // keys); the rebind panel LISTS them read-only ("fixed"). Behavior unchanged.
+      if (BA.rebind && BA.rebind.register) {
+        BA.rebind.register('build.line',       { rebindable: false, category: 'Build placement', label: 'Line build',     displayKey: 'Shift + Drag' });
+        BA.rebind.register('build.grid',       { rebindable: false, category: 'Build placement', label: 'Grid build',     displayKey: 'Shift + Alt + Drag' });
+        BA.rebind.register('build.spacingInc', { rebindable: false, category: 'Build placement', label: 'Build spacing +', displayKey: 'Alt + Z' });
+        BA.rebind.register('build.spacingDec', { rebindable: false, category: 'Build placement', label: 'Build spacing -', displayKey: 'Alt + X' });
+      }
+
       log('buildplace ready (v10) — plain left = NATIVE (place + drag-rotate); Shift+drag = LINE, +Alt = GRID (face along drag); Alt+Z/X = spacing (per-building); release Shift = single');
     }
   });

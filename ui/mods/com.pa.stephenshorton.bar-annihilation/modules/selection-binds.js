@@ -194,43 +194,54 @@
         } catch (e) { BA.err('self-destruct failed', e); }
       }
 
-      // Mousetrap key string (BAR Grid default) -> { label, run }.
-      // ONLY bind what BAR's own configs bind. The engine (BA.select.run) supports the
-      // full BAR `select` DSL, but bound KEYS mirror BAR's defaults — no invented binds.
-      var KEYMAP = {
-        'tab':      { label: 'Select commander',    run: function () { selectThenFocusOnRepeat(function () { api.select.commander(); }, 'select commander'); } },
-        'ctrl+tab': { label: 'Select idle builder', run: selectIdleBuilderCycle },
-        'ctrl+q':   { label: 'Split selection 50%', run: split50 },
-        'ctrl+e':   { label: 'Select all units',    run: selectAllUnits },
-        'q':        { label: 'Select same type (on screen)', run: selectSameTypeOnScreen },
-        'ctrl+w':   { label: 'Select same type (map-wide)',  run: selectSameTypeMapWide },
-        ';':        { label: 'Move state (tap 1/2/3 = roam/hold/maneuver)', run: multiTapOrder({ 1: 'Roam', 2: 'HoldPosition', 3: 'Maneuver' }, 'move state') },
-        'l':        { label: 'Fire state (tap 1/2/3 = free/hold/return)',   run: multiTapOrder({ 1: 'FireAtWill', 2: 'HoldFire', 3: 'ReturnFire' }, 'fire state') },
-        'y':        { label: 'Wait / energy hold (toggle)',                 run: function () { sendActionBar('toggle_order', 'Energy', 'wait/hold'); } },
+      // ---- Register every action into the BA.rebind registry (M8) ------------
+      // Decoupled from the key: the registry owns id->key mapping + persisted
+      // overrides; we bind via applyBinds() and re-bind on onChange(). The default
+      // keys here are VERBATIM from the old KEYMAP. ONLY bind what BAR's own configs
+      // bind — the engine (BA.select.run) supports the full `select` DSL, but bound
+      // KEYS mirror BAR's defaults (no invented binds). Rows: [id, defaultKey,
+      // category, label, run].
+      var REG = [
+        // Selection
+        ['select.commander',      'tab',      'Selection', 'Select commander',              function () { selectThenFocusOnRepeat(function () { api.select.commander(); }, 'select commander'); }],
+        ['select.idleBuilder',    'ctrl+tab', 'Selection', 'Select idle builder',           selectIdleBuilderCycle],
+        ['select.split50',        'ctrl+q',   'Selection', 'Split selection 50%',           split50],
+        ['select.allUnits',       'ctrl+e',   'Selection', 'Select all units',              selectAllUnits],
+        ['select.sameTypeScreen', 'q',        'Selection', 'Select same type (on screen)',  selectSameTypeOnScreen],
+        ['select.sameTypeMap',    'ctrl+w',   'Selection', 'Select same type (map-wide)',   selectSameTypeMapWide],
+        // Order-states (M7 multi-tap absolute set / toggle)
+        ['order.move',   ';', 'Order states', 'Move state (tap 1/2/3 = roam/hold/maneuver)', multiTapOrder({ 1: 'Roam', 2: 'HoldPosition', 3: 'Maneuver' }, 'move state')],
+        ['order.fire',   'l', 'Order states', 'Fire state (tap 1/2/3 = free/hold/return)',   multiTapOrder({ 1: 'FireAtWill', 2: 'HoldFire', 3: 'ReturnFire' }, 'fire state')],
+        ['order.energy', 'y', 'Order states', 'Wait / energy hold (toggle)',                 function () { sendActionBar('toggle_order', 'Energy', 'wait/hold'); }],
         // T = BAR "repeat". PA's only repeat is a factory's continuous build-stance
         // (buildStanceOrders ['normal','continuous'], gated canBuild && !mobile), so this
         // faithfully toggles factory repeat and no-ops on mobile units (PA has no mobile
         // queue-repeat). Same action_bar path as the Y/energy toggle.
-        't':        { label: 'Repeat (factory build stance)',              run: function () { sendActionBar('toggle_order', 'BuildStance', 'repeat / build stance'); } },
-        // Command modes (BAR no-mod command row) — arm a PA command cursor, then click a target.
-        'a':        { label: 'Attack',              run: cmdMode(1, 'attack') },
-        'e':        { label: 'Reclaim',             run: cmdMode(4, 'reclaim') },
-        'r':        { label: 'Repair',              run: cmdMode(3, 'repair') },
-        'f':        { label: 'Fight (attack-move)', run: cmdMode(1, 'fight (attack-move)') },
-        'g':        { label: 'Stop',                run: cmdMode(-1, 'stop') },
-        'h':        { label: 'Patrol',              run: cmdMode(5, 'patrol') },
-        'j':        { label: 'Load',                run: cmdMode(10, 'load') },
-        'u':        { label: 'Unload',              run: cmdMode(9, 'unload') },
-        'o':        { label: 'Guard (assist)',      run: cmdMode(2, 'guard/assist') },
-        'd':        { label: 'D-Gun / manual fire', run: cmdMode(12, 'd-gun') },
-        'ctrl+g':   { label: 'Factory guard (assist)', run: cmdMode(2, 'factory guard') },
-        'ctrl+b':   { label: 'Self-destruct (instant)', run: selfDestruct },
-        '\\':       { label: 'Toggle key overlay',  run: function () { if (BA.overlayToggle) BA.overlayToggle(); else BA.warn('overlay toggle not ready yet'); } },
-        'ctrl+shift+r': { label: 'Reload UI scene (dev)', run: function () { try { BA.log('reloading live_game scene...'); api.game.debug.reloadScene(api.Panel.pageId); } catch (e) { BA.err('scene reload failed', e); } } }
-      };
-
-      // Publish our binds for the keyboard overlay.
-      for (var bk in KEYMAP) { if (KEYMAP.hasOwnProperty(bk)) BA.binds[bk] = KEYMAP[bk].label; }
+        ['order.repeat', 't', 'Order states', 'Repeat (factory build stance)',               function () { sendActionBar('toggle_order', 'BuildStance', 'repeat / build stance'); }],
+        // Commands (BAR no-mod command row) — arm a PA command cursor, then click a target.
+        ['cmd.attack',       'a',      'Commands', 'Attack',                  cmdMode(1, 'attack')],
+        ['cmd.reclaim',      'e',      'Commands', 'Reclaim',                 cmdMode(4, 'reclaim')],
+        ['cmd.repair',       'r',      'Commands', 'Repair',                  cmdMode(3, 'repair')],
+        ['cmd.fight',        'f',      'Commands', 'Fight (attack-move)',     cmdMode(1, 'fight (attack-move)')],
+        ['cmd.stop',         'g',      'Commands', 'Stop',                    cmdMode(-1, 'stop')],
+        ['cmd.patrol',       'h',      'Commands', 'Patrol',                  cmdMode(5, 'patrol')],
+        ['cmd.load',         'j',      'Commands', 'Load',                    cmdMode(10, 'load')],
+        ['cmd.unload',       'u',      'Commands', 'Unload',                  cmdMode(9, 'unload')],
+        ['cmd.guard',        'o',      'Commands', 'Guard (assist)',          cmdMode(2, 'guard/assist')],
+        ['cmd.dgun',         'd',      'Commands', 'D-Gun / manual fire',     cmdMode(12, 'd-gun')],
+        ['cmd.factoryGuard', 'ctrl+g', 'Commands', 'Factory guard (assist)',  cmdMode(2, 'factory guard')],
+        ['unit.selfDestruct','ctrl+b', 'Commands', 'Self-destruct (instant)', selfDestruct],
+        // UI
+        ['ui.overlay',     '\\',           'UI', 'Toggle key overlay',    function () { if (BA.overlayToggle) BA.overlayToggle(); else BA.warn('overlay toggle not ready yet'); }],
+        ['ui.reloadScene', 'ctrl+shift+r', 'UI', 'Reload UI scene (dev)',  function () { try { BA.log('reloading live_game scene...'); api.game.debug.reloadScene(api.Panel.pageId); } catch (e) { BA.err('scene reload failed', e); } }]
+      ];
+      // NOTE: ui.openRebind is intentionally NOT registered here — the rebind panel
+      // module owns it (unbound by default; user assigns it from the panel).
+      if (BA.rebind && BA.rebind.register) {
+        for (var ri = 0; ri < REG.length; ri++) {
+          BA.rebind.register(REG[ri][0], { defaultKey: REG[ri][1], category: REG[ri][2], label: REG[ri][3], run: REG[ri][4] });
+        }
+      } else { BA.warn('BA.rebind unavailable — keybinds will not apply (registry missing)'); }
 
       function wrap(fn) {
         return function () {
@@ -240,16 +251,46 @@
         };
       }
 
-      function applyBinds() {
-        var keys = Object.keys(KEYMAP), n = 0;
-        for (var i = 0; i < keys.length; i++) {
-          var k = keys[i];
-          try { Mousetrap.unbind(k); Mousetrap.bind(k, wrap(KEYMAP[k].run), 'keydown'); n++; }
-          catch (e) { BA.err('failed to bind ' + k, e); }
+      // Rebuild BA.binds (key -> label) for the keyboard overlay from the LIVE keys
+      // of rebindable, bound actions only (display-only capture gestures are owned by
+      // the other modules and are not single Mousetrap keys). Reassigns a fresh map so
+      // stale keys never linger; the overlay reads BA.binds afresh each render.
+      function syncBABinds() {
+        var next = {}, all = (BA.rebind && BA.rebind.getAll) ? BA.rebind.getAll() : [];
+        for (var i = 0; i < all.length; i++) {
+          var r = all[i];
+          if (!r.rebindable || !r.run || !r.key) continue;
+          next[r.key] = r.label;
         }
+        BA.binds = next;
+      }
+
+      // Registry-driven bind pass. Track _boundKeys and unbind them first so a rebind
+      // releases the STALE key (keys change at runtime now — critical). Total override:
+      // Mousetrap.unbind+bind per action, wrap() returns false so PA's own action for
+      // that key is fully blocked. Digits 1-0 are never bindable (registry isReserved).
+      var _boundKeys = [];
+      function applyBinds() {
+        for (var u = 0; u < _boundKeys.length; u++) { try { Mousetrap.unbind(_boundKeys[u]); } catch (e) {} }
+        _boundKeys = [];
+        var all = (BA.rebind && BA.rebind.getAll) ? BA.rebind.getAll() : [], n = 0, keys = [];
+        for (var i = 0; i < all.length; i++) {
+          var r = all[i];
+          if (!r.rebindable || !r.run || !r.key) continue;      // skip display-only + unbound
+          try {
+            Mousetrap.unbind(r.key);
+            Mousetrap.bind(r.key, wrap(r.run), r.event || 'keydown');
+            _boundKeys.push(r.key); keys.push(r.key); n++;
+          } catch (e) { BA.err('failed to bind ' + r.key, e); }
+        }
+        syncBABinds();                       // keep the overlay's key->label current
         BA.log('BAR binds applied (' + n + ' keys, PA blocked): ' + keys.join(' '));
       }
       applyBinds();
+
+      // Live re-apply when a bind is changed/reset (the rebind panel calls
+      // BA.rebind.set/reset -> onChange). pushBarKeybinds is hoisted (declared below).
+      try { if (BA.rebind && BA.rebind.onChange) BA.rebind.onChange(function () { applyBinds(); pushBarKeybinds(); }); } catch (e) {}
 
       try { if (typeof active_dictionary !== 'undefined' && active_dictionary && active_dictionary.subscribe) active_dictionary.subscribe(function () { applyBinds(); }); }
       catch (e) { BA.warn('could not hook active_dictionary: ' + (e && e.message)); }
@@ -266,16 +307,48 @@
       // indices we rebound) to the action_bar via PA's own channel (live_game.js:2896).
       // Indices we didn't rebind keep PA's own labels. NOTE: these are DISPLAY-array
       // indices (the keybindsForCommandModes list order), NOT setCommandIndex values.
-      var CMD_LABELS = { 1: 'A', 2: 'D', 3: 'O', 4: 'R', 5: 'E', 6: 'H', 9: 'U', 10: 'J', 12: 'G' };
-      var ORDER_LABELS = { 0: 'L', 1: ';', 2: 'Y', 3: 'T' };   // orders [fire,move,energy,build-stance]
+      // actionId -> display slot [arrayName, index]. Badges are computed from each
+      // action's LIVE key, so the native bar tracks rebinds; at default keys keyBadge()
+      // reproduces today's badges byte-for-byte: commands A D O R E H U J G / orders L ; Y T.
+      var BAR_SLOTS = {
+        'cmd.attack':  ['commands', 1],
+        'cmd.dgun':    ['commands', 2],
+        'cmd.guard':   ['commands', 3],
+        'cmd.repair':  ['commands', 4],
+        'cmd.reclaim': ['commands', 5],
+        'cmd.patrol':  ['commands', 6],
+        'cmd.unload':  ['commands', 9],
+        'cmd.load':    ['commands', 10],
+        'cmd.stop':    ['commands', 12],
+        'order.fire':   ['orders', 0],
+        'order.move':   ['orders', 1],   // orders [fire,move,energy,build-stance]
+        'order.energy': ['orders', 2],
+        'order.repeat': ['orders', 3]
+      };
+      // key-string -> a short action-bar badge: uppercase a single base char, keep
+      // symbols (';' '\') and multi-char tokens (tab/esc) as-is, prefix modifiers.
+      function keyBadge(key) {
+        if (!key) return '';
+        var seg = String(key).split('+'), b = seg.pop(), pre = '';
+        for (var i = 0; i < seg.length; i++) {
+          var m = seg[i];
+          pre += (m === 'ctrl') ? 'Ctrl+' : (m === 'alt') ? 'Alt+' : (m === 'shift') ? 'Shift+' : (m + '+');
+        }
+        return pre + ((b.length === 1) ? b.toUpperCase() : b);
+      }
       function pushBarKeybinds() {
         try {
           if (!api.panels || !api.panels.action_bar || !api.panels.action_bar.message) return;
           if (typeof model === 'undefined' || !model || !model.actionKeybinds) return;
           var base = model.actionKeybinds() || {};
           var commands = (base.commands || []).slice(), orders = (base.orders || []).slice();
-          for (var ci in CMD_LABELS) if (CMD_LABELS.hasOwnProperty(ci)) commands[ci] = CMD_LABELS[ci];
-          for (var oi in ORDER_LABELS) if (ORDER_LABELS.hasOwnProperty(oi)) orders[oi] = ORDER_LABELS[oi];
+          for (var id in BAR_SLOTS) {
+            if (!BAR_SLOTS.hasOwnProperty(id)) continue;
+            var key = (BA.rebind && BA.rebind.keyOf) ? BA.rebind.keyOf(id) : '';
+            if (!key) continue;                          // unbound -> keep PA's own label
+            var slot = BAR_SLOTS[id], badge = keyBadge(key);
+            if (slot[0] === 'commands') commands[slot[1]] = badge; else orders[slot[1]] = badge;
+          }
           api.panels.action_bar.message('keybinds', { commands: commands, orders: orders });
         } catch (e) { BA.err('pushBarKeybinds failed', e); }
       }
