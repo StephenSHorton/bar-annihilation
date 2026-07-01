@@ -317,6 +317,28 @@
       try { if (typeof input_maps_reload !== 'undefined' && input_maps_reload && input_maps_reload.progress) input_maps_reload.progress(function () { setTimeout(applyBinds, 0); }); }
       catch (e) {}
 
+      // PA wipes ALL Mousetrap binds on EVERY active_dictionary change (inputmap.js:537
+      // calls Mousetrap.reset() on selection / build-mode / camera / settings changes)
+      // and re-binds ONLY its own dictionary — which reasserts PA's native command keys
+      // (a=attack, e=reclaim, ...) on top of ours. That is why a key we moved or unbound
+      // starts working again the moment you select a unit. Hook reset so we ALWAYS
+      // re-apply our full scheme (live binds + swallowed keys) right after PA rebuilds.
+      // _boundKeys is cleared first because reset already wiped our bindings, so there is
+      // nothing stale of ours left to release.
+      try {
+        if (typeof Mousetrap !== 'undefined' && Mousetrap.reset && !Mousetrap.__barResetHook) {
+          var _mtReset = Mousetrap.reset;
+          Mousetrap.reset = function () {
+            var ret = _mtReset.apply(Mousetrap, arguments);
+            _boundKeys = [];
+            setTimeout(function () { applyBinds(); pushBarKeybinds(); }, 0);
+            return ret;
+          };
+          Mousetrap.__barResetHook = true;
+          BA.log('hooked Mousetrap.reset -> BAR scheme re-applies after PA rebuilds its keymap');
+        }
+      } catch (e) { BA.warn('could not hook Mousetrap.reset: ' + (e && e.message)); }
+
       // ---- Native command/orders bar: show BAR keys, not PA's defaults -----
       // PA's action_bar renders model.actionKeybinds() labels (live_game.js:2852+):
       //   commands[] = [move, attack, altFire, assist, repair, reclaim, patrol,
