@@ -195,6 +195,7 @@
         if (visible) hide(); else show();
       }
       BA.overlayToggle = toggle;                // bound to backslash via bar-binds (Mousetrap)
+      BA.overlayHide = hide;                     // M8: the rebind panel's overlay:rebind handler hides us before it shows
 
       function updMods(e, down) {
         var nc = e.ctrlKey, na = e.altKey, ns = e.shiftKey, ch = false;
