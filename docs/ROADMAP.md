@@ -41,8 +41,17 @@ HP / idle / queue / set-target / build-quota walls: PA's sim is a closed C++ box
 thin unit-metadata surface — no per-unit HP, command queue, target, idle, or quota accessor, and
 no equivalent of Recoil's in-sim Lua gadgets. And server mods only run in custom/local lobbies,
 never in matchmaking. The six walls are permanent PA-engine limits. Full write-up +
-evidence: [`SERVER-MOD-INVESTIGATION.md`](./SERVER-MOD-INVESTIGATION.md). **Next:** deepen
-client-reachable features (selection / build / formations / command-mode UX).
+evidence: [`SERVER-MOD-INVESTIGATION.md`](./SERVER-MOD-INVESTIGATION.md).
+
+**Client-reachable backlog (2026-07-01).** A catalog-wide audit ranked what's still portable now that
+the walls are closed — see [`CLIENT-REACHABLE-BACKLOG.md`](./CLIENT-REACHABLE-BACKLOG.md). Key finding:
+PA has no world→screen projection API, so the entire render-at-unit-position overlay tier (range rings,
+per-unit state icons, blast previews, builder-queue ghosts — ~15 candidates) is itself a wall; only
+fixed screen-space HUD panels and screen→world input gestures survive. **Top of the list → proposed
+"M9 — HUD panels":** the **Idle Builders panel** and the **In-game Keybind/control-scheme panel**
+(both clean screen-space HUDs reusing the M3/M8 plumbing, high value, zero reachability risk), plus a
+metal-spot probe (gates the extractor-automation branch) and a queue-shadow spike (unlocks Factory
+Presets).
 
 ---
 
