@@ -36,6 +36,10 @@
     .kb-legend { margin-top:10px; font-size:10px; color:#8aa3b8; display:flex; }
     .kb-legend span { margin-right:18px; }
     .kb-swatch { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:5px; vertical-align:middle; }
+    .kb-foot { margin-top:12px; display:flex; justify-content:flex-end; }
+    .kb-rebindbtn { padding:6px 16px; font-size:12px; font-weight:600; color:#ffd877; background:#2a2410;
+                    border:1px solid #d2a73a; border-radius:6px; cursor:pointer; letter-spacing:.03em; }
+    .kb-rebindbtn:hover { background:#3a3216; border-color:#f0c860; color:#fff; }
   </style>
 </head>
 <body class="body_panel">
@@ -63,6 +67,10 @@
         + '<span>Hold a modifier or click a tab &mdash; click outside or Esc to close</span></div>';
     }
 
+    function footerHtml() {
+      return '<div class="kb-foot"><div class="kb-rebindbtn" data-action="rebind">Rebind Keys&hellip;</div></div>';
+    }
+
     function render() {
       var root = document.getElementById('bar-root');
       if (!root) return;
@@ -77,7 +85,7 @@
         + '<div class="kb-title">BAR Annihilation &mdash; Key Bindings</div>'
         + '<div class="kb-tabs">' + tabs + '</div>'
         + '<div class="kb-grid">' + (state.layers[active] || '') + '</div>'
-        + legendHtml() + '</div>';
+        + legendHtml() + footerHtml() + '</div>';
     }
 
     $(document).ready(function () {
@@ -95,6 +103,10 @@
       document.addEventListener('click', function (e) {
         var t = e.target, inPanel = false;
         while (t && t.getAttribute) {
+          if (t.getAttribute('data-action') === 'rebind') {       // footer "Rebind Keys" -> open the rebind panel
+            try { if (window.api && api.Panel && api.Panel.query) api.Panel.query(api.Panel.parentId, 'overlay:rebind', {}); } catch (err) {}
+            return;
+          }
           var combo = t.getAttribute('data-combo');
           if (combo !== null) { state.clicked = combo; render(); return; }
           if (t.className && (' ' + t.className + ' ').indexOf(' kb-panel ') >= 0) inPanel = true;

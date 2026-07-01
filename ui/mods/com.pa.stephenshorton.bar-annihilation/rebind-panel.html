@@ -1,0 +1,231 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+  <meta locns="live_game" />
+  <noloc><title>BAR Annihilation: Rebind Keys</title></noloc>
+  <link href="bundle://boot/boot.css" rel="stylesheet" type="text/css" />
+  <script src="bundle://boot/boot.js" type="text/javascript"></script>
+  <style>
+    html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; }
+    body.body_panel { background:rgba(8,12,18,0.82); font-family:Exo,"Segoe UI",sans-serif; color:#cfe3f2; }
+    #rb-root { position:absolute; left:0; top:0; right:0; bottom:0; display:flex; align-items:center; justify-content:center; }
+    .rb-box { width:640px; max-height:78%; display:flex; flex-direction:column; padding:16px 18px; box-sizing:border-box;
+              background:rgba(14,20,28,0.98); border:1px solid #2b6c9c; border-radius:10px; box-shadow:0 10px 50px rgba(0,0,0,.6); }
+    .rb-title { font-size:18px; color:#7fd1ff; letter-spacing:.04em; margin-bottom:12px; }
+    .rb-tabs { display:flex; flex-wrap:wrap; margin-bottom:10px; }
+    .rb-tab { padding:5px 14px; margin:0 6px 6px 0; font-size:12px; color:#9fb3c6; background:rgba(20,28,38,0.9);
+              border:1px solid #33485c; border-radius:6px; cursor:pointer; }
+    .rb-tab:hover { color:#cfe3f2; border-color:#3f7fb0; }
+    .rb-tab.active { color:#7fd1ff; background:#1c3145; border-color:#2b6c9c; }
+    .rb-list { flex:1; overflow-y:auto; border-top:1px solid #22303f; border-bottom:1px solid #22303f; padding:4px 0; }
+    .rb-row { display:flex; align-items:center; padding:6px 4px; border-bottom:1px solid rgba(34,48,63,0.5); }
+    .rb-row:last-child { border-bottom:none; }
+    .rb-label { flex:1; font-size:13px; color:#cfe3f2; }
+    .rb-badge { min-width:140px; text-align:center; padding:4px 8px; margin:0 12px; font-size:12px; font-weight:600;
+                color:#d4e6f5; background:#1c3145; border:1px solid #3f7fb0; border-radius:5px; }
+    .rb-row.changed .rb-badge { color:#ffd877; background:#2a2410; border-color:#d2a73a; }
+    .rb-row.readonly .rb-label { color:#7f8fa0; }
+    .rb-row.readonly .rb-badge { color:#9fb3c6; background:#161f29; border-color:#2b3a49; }
+    .rb-actions { display:flex; align-items:center; min-width:150px; justify-content:flex-end; }
+    .rb-fixed { font-size:11px; color:#6d7d8e; font-style:italic; }
+    .rb-empty { padding:20px; text-align:center; color:#7f8fa0; font-size:13px; }
+    .rb-foot { display:flex; margin-top:12px; }
+    .rb-btn { display:inline-block; padding:6px 14px; font-size:12px; font-weight:600; color:#dcefff;
+              background:rgba(43,108,156,0.35); border:1px solid #2b6c9c; border-radius:5px; cursor:pointer; letter-spacing:.03em; }
+    .rb-btn:hover { background:rgba(95,168,224,0.45); border-color:#5fa8e0; color:#fff; }
+    .rb-btn.rb-mini { padding:3px 10px; font-size:11px; margin-left:8px; }
+    .rb-btn.rb-warn { background:#2a2410; border-color:#d2a73a; color:#ffd877; }
+    .rb-btn.rb-warn:hover { background:#3a3216; border-color:#f0c860; color:#fff; }
+    .rb-foot .rb-btn { margin-right:8px; }
+    .rb-foot .rb-close { margin-left:auto; margin-right:0; }
+    /* modal sub-panels (capture / conflict / io) */
+    .rb-modal { position:absolute; left:0; top:0; right:0; bottom:0; background:rgba(6,9,14,0.78);
+                display:flex; align-items:center; justify-content:center; }
+    .rb-sub { width:440px; padding:22px 24px; box-sizing:border-box; background:rgba(16,23,32,0.99);
+              border:1px solid #2b6c9c; border-radius:10px; box-shadow:0 10px 50px rgba(0,0,0,.7); text-align:center; }
+    .rb-sub.rb-io { width:560px; text-align:left; }
+    .rb-sub-title { font-size:15px; color:#7fd1ff; margin-bottom:14px; }
+    .rb-sub-big { font-size:26px; font-weight:700; color:#ffd877; margin:8px 0 14px; letter-spacing:.03em; }
+    .rb-sub-msg { font-size:13px; color:#cfe3f2; margin-bottom:18px; line-height:1.4; }
+    .rb-sub-hint { font-size:11px; color:#8aa3b8; margin:10px 0 16px; }
+    .rb-sub-err { font-size:12px; color:#ff9a8a; margin-bottom:12px; }
+    .rb-sub-btns { display:flex; justify-content:center; }
+    .rb-sub.rb-io .rb-sub-btns { justify-content:flex-end; }
+    .rb-sub-btns .rb-btn { margin:0 6px; }
+    .rb-io-text { width:100%; height:150px; box-sizing:border-box; margin:6px 0; padding:8px; resize:none;
+                  font-family:Consolas,"Courier New",monospace; font-size:11px; color:#cfe3f2;
+                  background:#0c141c; border:1px solid #33485c; border-radius:5px; }
+  </style>
+</head>
+<body class="body_panel">
+  <div id="rb-root"></div>
+  <script type="text/javascript">
+    // Dumb renderer. The live_game host (modules/rebind.js) pushes:
+    //   rebind.list  { tabs:[category], actions:[{id,label,category,rebindable,key,comboDisplay,isOverridden,defaultDisplay}] }
+    //   rebind.state { mode:'idle'|'capturing'|'conflict'|'io', ... }
+    // Clicks route back via api.Panel.query(parentId, type, payload) — 'panel.query'
+    // is always whitelisted (reaches handlers[type] via onQuery); custom panel.message
+    // types would be dropped by the parent's panel.ready filter.
+    var model = {};
+    var handlers = {};
+    var data = { tabs: [], actions: [] };
+    var ui = { mode: 'idle' };
+    var activeTab = null;
+    var ioTextBuf = '';                 // preserve import text across a re-render
+    var lastList = null, lastState = null;
+
+    function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+    function renderTabs() {
+      var h = '';
+      for (var i = 0; i < data.tabs.length; i++) {
+        var c = data.tabs[i];
+        h += '<div class="rb-tab' + (c === activeTab ? ' active' : '') + '" data-tab="' + esc(c) + '">' + esc(c) + '</div>';
+      }
+      return h;
+    }
+
+    function renderRows() {
+      var h = '', any = false;
+      for (var i = 0; i < data.actions.length; i++) {
+        var a = data.actions[i];
+        if (a.category !== activeTab) continue;
+        any = true;
+        var cls = 'rb-row' + (a.isOverridden ? ' changed' : '') + (a.rebindable ? '' : ' readonly');
+        var right;
+        if (a.rebindable) {
+          right = '<div class="rb-btn rb-mini" data-act="start" data-id="' + esc(a.id) + '">Rebind</div>'
+                + '<div class="rb-btn rb-mini" data-act="reset" data-id="' + esc(a.id) + '"'
+                + (a.isOverridden ? '' : ' style="visibility:hidden"') + '>Reset</div>';
+        } else {
+          right = '<span class="rb-fixed">(fixed)</span>';
+        }
+        h += '<div class="' + cls + '">'
+           + '<span class="rb-label">' + esc(a.label) + '</span>'
+           + '<span class="rb-badge">' + esc(a.comboDisplay || 'Unbound') + '</span>'
+           + '<span class="rb-actions">' + right + '</span>'
+           + '</div>';
+      }
+      return any ? h : '<div class="rb-empty">No bindings in this category.</div>';
+    }
+
+    function renderModal() {
+      if (!ui || !ui.mode || ui.mode === 'idle') return '';
+      var inner = '';
+      if (ui.mode === 'capturing') {
+        inner = '<div id="rb-capture" class="rb-sub">'
+          + '<div class="rb-sub-title">Rebinding: <b>' + esc(ui.label || '') + '</b></div>'
+          + '<div class="rb-sub-big">' + esc(ui.preview || 'Press a key…') + '</div>'
+          + (ui.error ? '<div class="rb-sub-err">' + esc(ui.error) + '</div>' : '')
+          + '<div class="rb-sub-hint">Press a key or modifier combo. Esc to cancel.</div>'
+          + '<div class="rb-sub-btns"><div class="rb-btn" data-act="cancelCapture">Cancel</div></div>'
+          + '</div>';
+      } else if (ui.mode === 'conflict') {
+        inner = '<div id="rb-conflict" class="rb-sub">'
+          + '<div class="rb-sub-title">Key already in use</div>'
+          + '<div class="rb-sub-big">' + esc(ui.keyDisplay || '') + '</div>'
+          + '<div class="rb-sub-msg"><b>' + esc(ui.keyDisplay || '') + '</b> is bound to <b>' + esc(ui.otherLabel || '') + '</b>.<br/>Overwrite and unbind it?</div>'
+          + '<div class="rb-sub-btns">'
+          +   '<div class="rb-btn rb-warn" data-act="confirm">Overwrite</div>'
+          +   '<div class="rb-btn" data-act="cancelConflict">Cancel</div>'
+          + '</div>'
+          + '</div>';
+      } else if (ui.mode === 'io') {
+        var isImport = (ui.io === 'import');
+        var txt = (ui.text != null) ? ui.text : ioTextBuf;
+        ioTextBuf = txt;
+        inner = '<div id="rb-io" class="rb-sub rb-io">'
+          + '<div class="rb-sub-title">' + (isImport ? 'Import bindings' : 'Export bindings') + '</div>'
+          + (ui.error ? '<div class="rb-sub-err">' + esc(ui.error) + '</div>' : '')
+          + '<textarea id="rb-io-text" class="rb-io-text"' + (isImport ? '' : ' readonly="readonly"') + '>' + esc(txt) + '</textarea>'
+          + '<div class="rb-sub-hint">' + (isImport ? 'Paste exported JSON, then Apply.' : 'Copy this JSON to save or share your bindings.') + '</div>'
+          + '<div class="rb-sub-btns">'
+          +   (isImport ? '<div class="rb-btn rb-warn" data-act="ioApply">Apply</div>' : '')
+          +   '<div class="rb-btn" data-act="ioClose">Close</div>'
+          + '</div>'
+          + '</div>';
+      }
+      return '<div class="rb-modal">' + inner + '</div>';
+    }
+
+    function render() {
+      var root = document.getElementById('rb-root');
+      if (!root) return;
+      var foot = '<div class="rb-foot">'
+        + '<div class="rb-btn" data-act="resetAll">Reset All</div>'
+        + '<div class="rb-btn" data-act="import">Import</div>'
+        + '<div class="rb-btn" data-act="export">Export</div>'
+        + '<div class="rb-btn rb-close" data-act="close">Close</div>'
+        + '</div>';
+      root.innerHTML = '<div class="rb-box">'
+        + '<div class="rb-title">BAR Annihilation &mdash; Rebind Keys</div>'
+        + '<div class="rb-tabs">' + renderTabs() + '</div>'
+        + '<div class="rb-list">' + renderRows() + '</div>'
+        + foot
+        + '</div>'
+        + renderModal();
+    }
+
+    function ioTextValue() { var ta = document.getElementById('rb-io-text'); return ta ? ta.value : ''; }
+    function q(type, payload) {
+      try { if (window.api && api.Panel && api.Panel.query) api.Panel.query(api.Panel.parentId, type, payload || {}); }
+      catch (e) {}
+    }
+
+    function handleAct(act, node) {
+      var id = node.getAttribute('data-id');
+      if (act === 'start') q('rebind.start', { id: id });
+      else if (act === 'reset') q('rebind.reset', { id: id });
+      else if (act === 'resetAll') q('rebind.resetAll', {});
+      else if (act === 'export') q('rebind.export', {});
+      else if (act === 'import') q('rebind.import', {});               // open the paste box
+      else if (act === 'ioApply') q('rebind.import', { json: ioTextValue() });
+      else if (act === 'ioClose') q('rebind.cancelCapture', {});       // dismiss io -> idle
+      else if (act === 'confirm') q('rebind.confirm', {});
+      else if (act === 'cancelConflict') q('rebind.cancelConflict', {});
+      else if (act === 'cancelCapture') q('rebind.cancelCapture', {});
+      else if (act === 'close') q('rebind.close', {});
+    }
+
+    function route(e) {
+      var t = e.target;
+      while (t && t.getAttribute) {
+        var tab = t.getAttribute('data-tab');
+        if (tab !== null) { activeTab = tab; render(); return; }        // panel-local tab switch
+        var act = t.getAttribute('data-act');
+        if (act) { handleAct(act, t); return; }
+        t = t.parentNode;
+      }
+    }
+
+    $(document).ready(function () {
+      handlers['rebind.list'] = function (payload) {
+        if (!payload) return;
+        var s = JSON.stringify(payload);
+        if (s === lastList) return;                 // dedupe interval re-pushes (no flicker)
+        lastList = s;
+        data.tabs = payload.tabs || [];
+        data.actions = payload.actions || [];
+        if (activeTab === null || data.tabs.indexOf(activeTab) < 0) activeTab = data.tabs.length ? data.tabs[0] : null;
+        render();
+      };
+      handlers['rebind.state'] = function (payload) {
+        if (!payload) return;
+        var s = JSON.stringify(payload);
+        if (s === lastState) return;
+        lastState = s;
+        ui = payload;
+        render();
+      };
+      // mousedown (reliable in this Coherent); mouseover/out are not. Buttons are
+      // <div>s so no default to suppress; a click on the textarea falls through to
+      // focus it.
+      document.addEventListener('mousedown', route, false);
+      document.addEventListener('contextmenu', function (e) { e.preventDefault(); }, false);
+      render();
+      app.registerWithCoherent(model, handlers);
+    });
+  </script>
+</body>
+</html>
