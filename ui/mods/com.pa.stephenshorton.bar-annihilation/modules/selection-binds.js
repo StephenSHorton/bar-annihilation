@@ -269,18 +269,24 @@
       // releases the STALE key (keys change at runtime now — critical). Total override:
       // Mousetrap.unbind+bind per action, wrap() returns false so PA's own action for
       // that key is fully blocked. Digits 1-0 are never bindable (registry isReserved).
+      // _boundKeys stores {key, event} pairs: Mousetrap.unbind MUST be given the same
+      // event type used to bind, or it targets the wrong action. A plain single-char key
+      // (e.g. 'z') binds under 'keydown' here, but unbind() with no action defaults to
+      // 'keypress' for such keys -> the keydown binding leaks and the old key keeps firing
+      // after a rebind. Passing the event fixes that.
       var _boundKeys = [];
       function applyBinds() {
-        for (var u = 0; u < _boundKeys.length; u++) { try { Mousetrap.unbind(_boundKeys[u]); } catch (e) {} }
+        for (var u = 0; u < _boundKeys.length; u++) { try { Mousetrap.unbind(_boundKeys[u].key, _boundKeys[u].event); } catch (e) {} }
         _boundKeys = [];
         var all = (BA.rebind && BA.rebind.getAll) ? BA.rebind.getAll() : [], n = 0, keys = [];
         for (var i = 0; i < all.length; i++) {
           var r = all[i];
           if (!r.rebindable || !r.run || !r.key) continue;      // skip display-only + unbound
+          var ev = r.event || 'keydown';
           try {
-            Mousetrap.unbind(r.key);
-            Mousetrap.bind(r.key, wrap(r.run), r.event || 'keydown');
-            _boundKeys.push(r.key); keys.push(r.key); n++;
+            Mousetrap.unbind(r.key, ev);
+            Mousetrap.bind(r.key, wrap(r.run), ev);
+            _boundKeys.push({ key: r.key, event: ev }); keys.push(r.key); n++;
           } catch (e) { BA.err('failed to bind ' + r.key, e); }
         }
         syncBABinds();                       // keep the overlay's key->label current
