@@ -30,9 +30,10 @@ anti-faithful; M3 `.`-cycle-builder + M7 Alt+G quota + M5 area target-filters ar
 (not on the Grid cards and/or need a Recoil GameCMD / server-mod PA can't provide from a
 client mod). M3 PriorityUnits top-row deferred (cosmetic; needs a hand-authored PA list).
 
-**In progress:** **M8** (keybind/rebinding layer) — architecture chosen: an in-game
-Coherent rebind panel + a localStorage bind registry (Option B). **Then:** the server-mod
-investigation to reclaim the HP/idle/queue walls (see M0 finding + catalog bucket d).
+**In review/playtest:** **M8** (keybind/rebinding layer) — built via agent team + adversarial
+review; integrated on `main`, awaiting the one in-game playtest (needs a full PA restart —
+M8 adds new files). **Then:** the server-mod investigation to reclaim the HP/idle/queue walls
+(see M0 finding + catalog bucket d).
 
 ---
 
@@ -126,14 +127,29 @@ command/orders bar is patched to show the mod's keys (`actionbar-tooltips.js`).
 **Walls (dropped):** `set-target`/target-ground (no PA verb), Alt+G build-quota
 (needs a Recoil GameCMD PA lacks). Per-unit default-states for new units: deferred.
 
-## M8 — Keybind / control-scheme layer  *(c)*  🚧 IN PROGRESS
+## M8 — Keybind / control-scheme layer  *(c)*  🔬 BUILT — awaiting playtest
 A config surface for binds so the above features are rebindable, with sensible
-BAR-like defaults out of the box. **Architecture chosen (2026-06-30): Option B —
-an in-game Coherent rebind panel + a localStorage bind registry** (`BA.rebind`),
-matching the mod's existing panel pattern; no PA-API mutation. Scope: simple 1:1
-(Mousetrap) binds are rebindable; capture-phase binds (shift+drag build, grid
-slots) shown display-only; key-chaining (BAR's `sc_l,sc_l` multi-tap) deferred to
-a later milestone. Plan: `docs/M8-KEYBIND-PLAN.md`.
+BAR-like defaults out of the box. **Architecture (2026-06-30): Option B — an in-game
+Coherent rebind panel + a localStorage bind registry** (`BA.rebind`), matching the
+mod's existing panel pattern; no PA-API mutation. Plan: `docs/M8-KEYBIND-PLAN.md`.
+
+**Built (Phase 1 registry → Phase 2 bind-refactor + panel in parallel worktrees →
+integrate + adversarial review, all on `main`):**
+- `modules/rebind-config.js` — the `BA.rebind` registry (deltas-only localStorage
+  `barann.binds`, conflict-steal, never-bind-1-0, export/import API, onChange).
+- `modules/selection-binds.js` refactored registry-driven (24 actions; `applyBinds`
+  unbinds stale keys; default action-bar badges verified byte-for-byte unchanged).
+- `modules/rebind.js` + `rebind-panel.html` — the panel (host-owned key-capture,
+  live conflict detection, reset/reset-all) opened via a **Rebind Keys** button in
+  the keyboard overlay. Display-only rows for the capture-phase gestures.
+
+**Scope:** simple 1:1 (Mousetrap) binds are rebindable; capture-phase binds
+(shift+drag build, grid slots, formation drag) shown display-only; **key-chaining**
+(BAR's `sc_l,sc_l` multi-tap) deferred. **Import/Export UI deferred** — the panel must
+be `no-keyboard` (so the host can capture rebind keys), so a paste textarea can't work;
+binds persist automatically and `BA.rebind.export()/import()` remain on the registry for
+the console. A click-driven clipboard version is a future item. **Review:** 2 findings,
+both fixed (a show()-on-bind-failure key-freeze guard; the Import/Export deferral).
 
 ---
 
