@@ -152,10 +152,12 @@
     function render() {
       var root = document.getElementById('rb-root');
       if (!root) return;
+      // NOTE: Import/Export are deferred — this panel is `no-keyboard` (required so
+      // the host can capture rebind keys), so the IO textarea can't receive paste.
+      // Binds persist automatically; power users can read/write BA.rebind.export()/
+      // .import() from the console. A click-driven clipboard version is a future item.
       var foot = '<div class="rb-foot">'
         + '<div class="rb-btn" data-act="resetAll">Reset All</div>'
-        + '<div class="rb-btn" data-act="import">Import</div>'
-        + '<div class="rb-btn" data-act="export">Export</div>'
         + '<div class="rb-btn rb-close" data-act="close">Close</div>'
         + '</div>';
       root.innerHTML = '<div class="rb-box">'

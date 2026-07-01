@@ -35,7 +35,7 @@
       var PANEL_ID = 'barann-rebind-panel';
       var SRC = 'coui://ui/mods/com.pa.stephenshorton.bar-annihilation/rebind-panel.html';
 
-      var visible = false, el = null, pushTimer = null;
+      var visible = false, el = null, pushTimer = null, bound = false;
       var lastList = null, lastState = null;
 
       // capture state machine
@@ -111,8 +111,8 @@
         el.style.cssText = 'position:absolute;left:0;top:0;width:100%;height:100%;z-index:1600;';
         el.style.display = 'none';                            // created hidden; show() reveals + forces update
         document.body.appendChild(el);
-        try { api.Panel.bindElement(el); BA.log('rebind panel bound: ' + PANEL_ID); }
-        catch (e) { BA.err('rebind panel bind failed', e); }
+        try { api.Panel.bindElement(el); bound = true; BA.log('rebind panel bound: ' + PANEL_ID); }
+        catch (e) { bound = false; BA.err('rebind panel bind failed', e); }
         return el;
       }
       function forceUpdate() { var p = api.panels[PANEL_ID]; if (p && p.update) { try { p.update(); } catch (e) {} } }
@@ -163,6 +163,11 @@
 
       function show() {
         ensurePanel();
+        if (!bound) {                                        // bind failed -> do NOT arm the modal capture (would swallow all keys behind an invisible panel)
+          BA.err('rebind panel unavailable (bind failed); not opening. A full PA restart is required after adding M8.', null);
+          if (el) el.style.display = 'none';
+          return;
+        }
         if (el) el.style.display = '';
         visible = true;
         mode = 'idle'; capId = null; pendingKey = null; pendingOther = null; captureError = null; ioState = null;
