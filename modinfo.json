@@ -14,6 +14,7 @@
   "scenes": {
     "live_game": [
       "coui://ui/mods/com.pa.stephenshorton.bar-annihilation/core.js",
+      "coui://ui/mods/com.pa.stephenshorton.bar-annihilation/modules/rebind-config.js",
       "coui://ui/mods/com.pa.stephenshorton.bar-annihilation/modules/display-defaults.js",
       "coui://ui/mods/com.pa.stephenshorton.bar-annihilation/modules/select-engine.js",
       "coui://ui/mods/com.pa.stephenshorton.bar-annihilation/modules/selection-binds.js",
